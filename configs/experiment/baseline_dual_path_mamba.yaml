@@ -1,0 +1,9 @@
+defaults:
+  - /data: sr8k                     # Mamba-TasNet reports numbers at 8 kHz
+  - /model: dual_path_mamba
+  - /training: default
+  - _self_
+
+tag: baseline_dual_path_mamba
+engine: standard
+seed: 20260415

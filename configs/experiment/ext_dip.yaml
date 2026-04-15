@@ -1,0 +1,9 @@
+defaults:
+  - /data: sr16k
+  - /model: dip_frontend
+  - /training: default
+  - _self_
+
+tag: ext_dip
+engine: standard
+seed: 20260415

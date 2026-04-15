@@ -1,0 +1,12 @@
+name: tiger
+# Defaults follow the upstream ``configs/speech-32k.yaml`` scaled to 16 kHz.
+out_channels: 128
+in_channels: 128
+num_blocks: 16
+upsampling_depth: 4
+att_n_head: 4
+att_hid_chan: 4
+att_kernel_size: 8
+att_stride: 1
+win: 1024                 # STFT window (samples) at 16 kHz
+stride: 256

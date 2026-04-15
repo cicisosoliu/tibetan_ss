@@ -1,0 +1,13 @@
+defaults:
+  - /data: sr16k
+  - /model: mossformer2
+  - /training: default
+  - _self_
+
+tag: baseline_mossformer2
+engine: standard
+seed: 20260415
+
+training:
+  dataloader:
+    batch_size: 2                 # MossFormer2-L is memory-heavy

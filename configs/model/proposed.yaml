@@ -1,0 +1,30 @@
+name: proposed
+# ------- backbone -------
+n_filters: 512            # N  (encoder filter bank)
+kernel_size: 32           # filter length in samples (16 for sr=8k, 32 for sr=16k)
+stride: null              # null → kernel_size // 2
+bottleneck: 128           # B
+tcn_hidden: 512           # H
+encoder_tcn_blocks: 8     # Encoder: TCN × 3 stacks of 8 dilated blocks (dilation 1..128)
+encoder_tcn_repeats: 3
+branch_tcn_blocks: 8      # Branch heads: TCN × 4 stacks each
+branch_tcn_repeats: 4
+decoder_tcn_blocks: 8     # Decoder: TCN × 3 stacks
+decoder_tcn_repeats: 3
+mask_nonlinear: relu
+perturbation_std: 1.0e-3
+
+# ------- discriminator -------
+discriminator:
+  n_ffts: [512, 1024, 2048]
+  hop_ratio: 0.25
+  channels: [32, 64, 128, 256, 512]
+
+# ------- 3-stage schedule -------
+schedule:
+  rep_from_epoch: 10
+  gan_from_epoch: 25
+  rep_weight: 0.05
+  gan_weight: 0.1
+
+disc_lr: 5.0e-4

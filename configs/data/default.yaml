@@ -1,0 +1,86 @@
+# Default data pipeline parameters
+# Follows the PPT plan (藏语多人语音分离20260414.pptx, slide 12) and training_data_generation.md.
+
+# Root layout (fill in before running):
+#   ${paths.tibetan_root}/              NICT-Tib1 source root (one subdir per speaker, .wav files inside)
+#   ${paths.noise_root}/                DEMAND noise root (one subdir per scene, .wav files inside)
+#   ${paths.output_root}/               where manifests / mixtures / splits are written
+
+paths:
+  tibetan_root: ${oc.env:TIBETAN_ROOT,???}
+  noise_root:   ${oc.env:DEMAND_ROOT,???}
+  output_root:  ${oc.env:TIBETAN_SS_OUTPUT,./data}
+
+# Speaker split (per project spec: NICT-Tib1 = 8M + 12F = 20 speakers)
+speaker_split:
+  train: { male: 6, female: 8 }
+  val:   { male: 1, female: 2 }
+  test:  { male: 1, female: 2 }
+  seed: 20260415        # fixed so the split is reproducible
+
+# Audio
+sample_rate: 16000
+num_channels: 1
+
+# Segment lengths (seconds)
+segment:
+  train: 3.0           # PPT says 2-4s; we pick mid-point; random within [min,max] if random_length=true
+  val:   3.0
+  test:  null          # null = no cropping (use full utterance)
+  random_length: true
+  min_seconds: 2.0
+  max_seconds: 4.0
+
+# Mixture simulation parameters (slide 12)
+mixing:
+  num_speakers: 2
+  overlap:
+    train: {mode: uniform, low: 0.0, high: 1.0}
+    val:
+      mode: mixture
+      components:
+        - {weight: 0.8, mode: uniform, low: 0.0, high: 1.0}
+        - {weight: 0.2, mode: uniform, low: 0.8, high: 1.0}
+    test:
+      mode: mixture
+      components:
+        - {weight: 0.7, mode: uniform, low: 0.0, high: 1.0}
+        - {weight: 0.3, mode: uniform, low: 0.8, high: 1.0}
+  # relative level between the two speakers (in dB); K ~ U(low, high)
+  level_diff_db: {low: -5.0, high: 5.0}
+  # mixture-vs-noise SNR (in dB); applied only when noise is enabled
+  snr_db:
+    train: {low: 2.5, high: 30.0}
+    val:   {low: 2.5, high: 30.0}
+    test:  {low: 0.0, high: 30.0}
+  gender_pairing: random     # options: random, same, cross
+  normalize: rms             # options: none, peak, rms
+  rms_target_dbfs: -25.0
+
+# Noise
+noise:
+  enabled: true
+  prob_apply: 1.0
+
+# Reverberation hook (not enabled yet – preserved for future work)
+reverb:
+  enabled: false
+  rir_root: null
+  t60_range: [0.2, 0.8]
+
+# Offline mixture generation (run once per split)
+offline:
+  num_mixtures:
+    train: 20000
+    val:   3000
+    test:  3000
+  output_subdir: mixtures
+  manifest_subdir: manifests
+  audio_format: wav
+  audio_subtype: PCM_16
+  seed: 20260415
+
+# Dynamic Mixing (online, defaults off; toggled via CLI)
+dynamic_mixing:
+  enabled: false
+  cache_per_epoch: 20000

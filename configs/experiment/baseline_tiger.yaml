@@ -1,0 +1,9 @@
+defaults:
+  - /data: sr16k
+  - /model: tiger
+  - /training: default
+  - _self_
+
+tag: baseline_tiger
+engine: standard
+seed: 20260415

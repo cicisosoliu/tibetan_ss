@@ -1,0 +1,9 @@
+defaults:
+  - /data: sr16k
+  - /model: proposed
+  - /training: default
+  - _self_
+
+tag: proposed
+engine: gan                 # triggers ProposedGANModule
+seed: 20260415

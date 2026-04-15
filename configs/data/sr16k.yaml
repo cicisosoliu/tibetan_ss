@@ -1,0 +1,5 @@
+# 16 kHz preset (default): matches LibriMix / Libri2Mix / WHAM!-style modern benchmarks
+defaults:
+  - default
+
+sample_rate: 16000

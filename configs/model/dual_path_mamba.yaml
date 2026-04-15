@@ -1,0 +1,13 @@
+name: dual_path_mamba
+# Default: medium (dpmamba_M). Switch to (256, 16, 4) for small or
+# (384, 20, 4) for large if GPU memory allows.
+n_encoder_out: 256
+kernel_size: 16
+n_dp: 16                  # dual-path outer layers
+chunk_size: 250
+n_mamba_dp: 2
+d_state: 16
+mamba_expand: 2
+mamba_conv: 4
+bidirectional: true
+skip_around_intra: true

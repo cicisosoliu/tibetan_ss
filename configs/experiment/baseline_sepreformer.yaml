@@ -1,0 +1,14 @@
+defaults:
+  - /data: sr16k
+  - /model: sepreformer
+  - /training: default
+  - _self_
+
+tag: baseline_sepreformer
+engine: standard
+seed: 20260415
+
+# SepReformer prefers a shorter segment at higher sample rate
+training:
+  dataloader:
+    batch_size: 2

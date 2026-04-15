@@ -1,0 +1,9 @@
+name: sepreformer
+# Loads hyper-params from
+#   third_party/SepReformer/models/<variant>/configs.yaml
+# and lets you override any numeric field here. Variants shipped upstream:
+#   SepReformer_Base_WSJ0       (small, fastest; 8 kHz)
+#   SepReformer_Large_DM_WSJ0   (8 kHz, DM)
+#   SepReformer_Large_DM_WHAM   (16 kHz, noisy)
+#   SepReformer_Large_DM_WHAMR  (16 kHz, noisy + reverb)
+variant: SepReformer_Base_WSJ0

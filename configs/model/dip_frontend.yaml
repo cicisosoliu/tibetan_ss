@@ -1,0 +1,15 @@
+name: dip_frontend
+n_filters: 512
+kernel_size: 32
+stride: null
+bottleneck: 128
+tcn_hidden: 512
+frontend_tcn_blocks: 8
+frontend_tcn_repeats: 3
+sep_tcn_blocks: 8
+sep_tcn_repeats: 3
+mask_nonlinear: relu
+# Set to true once you have pre-trained the frontend via BYOL SSL and saved the
+# weights back onto the checkpoint. See docs/models.md for the SSL recipe.
+freeze_frontend: false
+projection_dim: 256

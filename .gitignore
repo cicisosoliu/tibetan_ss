@@ -1,0 +1,217 @@
+# ============================================================================
+# Project root .gitignore
+# Repo: Tibetan Speech Separation (speech separation/)
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# macOS / Linux / Windows system files
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------------------
+# Editors / IDEs
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.spyderproject
+.spyproject
+.ropeproject
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.installed.cfg
+pip-wheel-metadata/
+MANIFEST
+
+# packaging / build
+build/
+dist/
+sdist/
+wheels/
+*.whl
+.pyproject.cache/
+
+# virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+conda-meta/
+
+# ---------------------------------------------------------------------------
+# Testing / linting / typing
+# ---------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+nosetests.xml
+.benchmarks/
+
+# ---------------------------------------------------------------------------
+# Jupyter / IPython
+# ---------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# ---------------------------------------------------------------------------
+# Secrets / environment
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# ---------------------------------------------------------------------------
+# Deep Learning: checkpoints / weights
+# ---------------------------------------------------------------------------
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.pb
+*.h5
+*.tflite
+*.pkl
+*.pickle
+*.npz
+*.npy
+# keep small sample / fixture weights if you add them under tests/
+!tests/fixtures/**/*.npz
+!tests/fixtures/**/*.pt
+
+# ---------------------------------------------------------------------------
+# Experiment logs / artifacts  (anchored; only top-level and tibetan_ss/)
+# ---------------------------------------------------------------------------
+/outputs/
+/logs/
+/tibetan_ss/outputs/
+/tibetan_ss/logs/
+lightning_logs/
+tb_logs/
+tensorboard/
+mlruns/
+wandb/
+/runs/
+checkpoints/
+*.log
+*.out
+*.err
+nohup.out
+
+# ---------------------------------------------------------------------------
+# Data (generated mixtures / manifests / caches)
+# Rules are anchored with `/` so they don't accidentally match
+# `configs/data/` or `src/tibetan_ss/data/`.
+# ---------------------------------------------------------------------------
+/tibetan_ss/data/
+/tibetan_ss/datasets/
+/tibetan_ss/outputs/
+/data/
+/datasets/
+
+# Audio artifacts produced during experiments (but keep paper figure audio)
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.ogg
+*.opus
+!paper/**/*.wav
+!paper/**/*.flac
+
+# ---------------------------------------------------------------------------
+# Third-party clones (pinned via docs/reproduce.md, not tracked here)
+# ---------------------------------------------------------------------------
+tibetan_ss/third_party/*/
+!tibetan_ss/third_party/.gitkeep
+!tibetan_ss/third_party/README.md
+
+# ---------------------------------------------------------------------------
+# Caches from ML libraries
+# ---------------------------------------------------------------------------
+.cache/
+.huggingface/
+.cache_huggingface/
+transformers_cache/
+torch_cache/
+~/.cache/torch/
+.triton/
+.nv/
+
+# ---------------------------------------------------------------------------
+# Hydra / OmegaConf (if hydra plugin enabled)
+# ---------------------------------------------------------------------------
+.hydra/
+multirun/
+
+# ---------------------------------------------------------------------------
+# Profiling / debugging
+# ---------------------------------------------------------------------------
+*.prof
+*.svg.dot
+*.pstats
+flamegraph.*
+
+# ---------------------------------------------------------------------------
+# Docs build artifacts
+# ---------------------------------------------------------------------------
+_build/
+site/
+.docusaurus/
+
+# ---------------------------------------------------------------------------
+# Large source archives (regeneratable) — uncomment to also ignore the raw zip
+# ---------------------------------------------------------------------------
+# 对标模型.zip
+
+third_party/

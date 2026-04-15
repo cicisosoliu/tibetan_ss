@@ -1,0 +1,5 @@
+# 8 kHz preset: matches WSJ0-2mix / classic Dual-path Mamba / DPRNN setting
+defaults:
+  - default
+
+sample_rate: 8000
