@@ -53,13 +53,17 @@ class MultiScaleSTFTDiscriminator(nn.Module):
         self.scales = nn.ModuleList([PatchGANSpec(channels=channels) for _ in self.n_ffts])
 
     def _compute_spec(self, x: torch.Tensor, n_fft: int) -> torch.Tensor:
+        # cuFFT rejects bf16 / fp16 — promote to fp32 and disable autocast for
+        # this block so STFT is always numerically safe. Gradients still flow.
         hop = max(1, int(n_fft * self.hop_ratio))
-        win = torch.hann_window(n_fft, device=x.device, dtype=x.dtype)
-        X = torch.stft(
-            x, n_fft=n_fft, hop_length=hop, win_length=n_fft,
-            window=win, return_complex=True, center=True, pad_mode="reflect",
-        )
-        mag = torch.log1p(X.abs())          # log-magnitude for better dynamic range
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x32 = x.float()
+            win = torch.hann_window(n_fft, device=x32.device, dtype=x32.dtype)
+            X = torch.stft(
+                x32, n_fft=n_fft, hop_length=hop, win_length=n_fft,
+                window=win, return_complex=True, center=True, pad_mode="reflect",
+            )
+            mag = torch.log1p(X.abs())      # log-magnitude for better dynamic range
         return mag.unsqueeze(1)             # (B, 1, F, T')
 
     def forward(self, audio: torch.Tensor) -> list[torch.Tensor]:
