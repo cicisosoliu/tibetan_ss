@@ -39,11 +39,16 @@ class TibetanMixDataset(Dataset):
         dynamic: bool = False,
         samples_per_epoch: int | None = None,
         seed: int = 0,
+        fixed_length_samples: int | None = None,
     ) -> None:
         self.split = split
         self.dynamic = dynamic
         self.seed = seed
         self._rng = np.random.default_rng(seed)
+        # When set, every returned (mixture, sources) pair is cropped or right-
+        # padded to exactly this many samples — required for default-collate
+        # batching of the train / val loaders.
+        self.fixed_length_samples = int(fixed_length_samples) if fixed_length_samples else None
 
         if dynamic:
             if speakers is None or mixing_cfg is None:
@@ -67,9 +72,10 @@ class TibetanMixDataset(Dataset):
 
     # ------------------------------------------------------------------
     def __getitem__(self, idx: int) -> dict[str, Any]:
-        if self.dynamic:
-            return self._sample_online(idx)
-        return self._load_offline(idx)
+        item = self._sample_online(idx) if self.dynamic else self._load_offline(idx)
+        if self.fixed_length_samples is not None:
+            item = _crop_or_pad(item, self.fixed_length_samples, idx, self.dynamic)
+        return item
 
     # ------------------------------------------------------------------
     def _load_offline(self, idx: int) -> dict[str, Any]:
@@ -114,6 +120,30 @@ class TibetanMixDataset(Dataset):
 # ---------------------------------------------------------------------------
 # Manifest IO
 # ---------------------------------------------------------------------------
+
+def _crop_or_pad(item: dict[str, Any], target_len: int, idx: int, dynamic: bool) -> dict[str, Any]:
+    """Crop or right-pad the (mixture, sources) tensors to ``target_len`` samples.
+
+    Deterministic offset per-idx keeps offline items reproducible; dynamic mode
+    already draws fresh crops every call so we just take the front.
+    """
+    mix = item["mixture"]
+    src = item["sources"]
+    T = mix.shape[-1]
+    if T == target_len:
+        return item
+    if T > target_len:
+        offset = 0 if dynamic else (idx * 7919 + 11) % (T - target_len + 1)
+        mix = mix[..., offset:offset + target_len]
+        src = src[..., offset:offset + target_len]
+    else:
+        pad = target_len - T
+        mix = torch.nn.functional.pad(mix, (0, pad))
+        src = torch.nn.functional.pad(src, (0, pad))
+    item["mixture"] = mix
+    item["sources"] = src
+    return item
+
 
 def _load_manifest(path: Path) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:

@@ -14,6 +14,11 @@ from .dataset import TibetanMixDataset, collate_variable_length
 from .mixing import MixingConfig
 
 
+# All three loaders use the same list-aware collator: train/val produce
+# fixed-length clips so padding is a no-op; test runs at natural length.
+_COLLATE = collate_variable_length
+
+
 class TibetanMixDataModule(pl.LightningDataModule):
     """Lightning wrapper around :class:`TibetanMixDataset`.
 
@@ -56,6 +61,14 @@ class TibetanMixDataModule(pl.LightningDataModule):
         full_length: bool = False,
     ) -> TibetanMixDataset:
         mcfg = self._mixing_cfg(split, sr, full_length=full_length)
+        # Fixed batch length for train / val so default_collate can stack the
+        # variable-length items the simulator produces. test uses
+        # collate_variable_length and full-length audio, so we pass None.
+        fixed_length = None
+        if not full_length:
+            seg_secs = self.cfg["segment"].get(split)
+            if seg_secs is not None:
+                fixed_length = int(float(seg_secs) * sr)
         if dynamic and split == "train":
             return TibetanMixDataset(
                 split=split,
@@ -65,11 +78,13 @@ class TibetanMixDataModule(pl.LightningDataModule):
                 dynamic=True,
                 samples_per_epoch=int(self.cfg["dynamic_mixing"].get("cache_per_epoch", 20000)),
                 seed=int(self.cfg["offline"]["seed"]) + _SPLIT_SEED[split],
+                fixed_length_samples=fixed_length,
             )
         return TibetanMixDataset(
             split=split,
             manifest_path=manifests_dir / f"{split}.json",
             seed=int(self.cfg["offline"]["seed"]) + _SPLIT_SEED[split],
+            fixed_length_samples=fixed_length,
         )
 
     # ------------------------------------------------------------------
@@ -102,6 +117,7 @@ class TibetanMixDataModule(pl.LightningDataModule):
             persistent_workers=bool(self.training_cfg["dataloader"]["persistent_workers"]),
             shuffle=True,
             drop_last=True,
+            collate_fn=_COLLATE,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -111,6 +127,7 @@ class TibetanMixDataModule(pl.LightningDataModule):
             num_workers=int(self.training_cfg["dataloader"]["num_workers"]),
             pin_memory=bool(self.training_cfg["dataloader"]["pin_memory"]),
             shuffle=False,
+            collate_fn=_COLLATE,
         )
 
     def test_dataloader(self) -> DataLoader:
