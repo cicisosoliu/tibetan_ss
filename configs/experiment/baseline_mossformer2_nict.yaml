@@ -1,0 +1,21 @@
+# MossFormer2 on NICT-Tib1 + DEMAND, formal training.
+# NOTE: requires speechbrain >= 1.0 with MossFormer2 recipe available.
+defaults:
+  - /data:     nict_tib1_full
+  - /model:    mossformer2
+  - /training: default
+  - _self_
+
+tag: baseline_mossformer2_nict
+engine: standard
+seed: 20260415
+
+training:
+  trainer:
+    max_epochs: 200
+    precision: 16-mixed
+    accumulate_grad_batches: 2       # effective batch = 4 at batch_size=2
+  dataloader:
+    batch_size: 2                    # MossFormer2-L is heavy
+  logger:
+    name: tensorboard

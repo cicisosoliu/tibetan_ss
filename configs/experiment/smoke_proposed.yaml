@@ -1,0 +1,58 @@
+# Smoke-test experiment: proposed model on NICT-Tib1 with dynamic mixing.
+#
+# Tuned to finish a full train+val+test cycle in ~20-30 minutes on a laptop
+# CPU, or ~5 minutes on a single mid-range GPU. For real experiments, copy
+# this file and bump model size / epochs / num_mixtures.
+
+defaults:
+  - /data:     nict_tib1
+  - /model:    proposed
+  - /training: default
+  - _self_
+
+tag: smoke_proposed
+engine: gan
+seed: 20260415
+
+# ---- model: shrink to a smoke-size variant ------------------------
+model:
+  n_filters: 128
+  bottleneck: 64
+  tcn_hidden: 128
+  encoder_tcn_blocks: 4
+  encoder_tcn_repeats: 1
+  branch_tcn_blocks: 4
+  branch_tcn_repeats: 1
+  decoder_tcn_blocks: 4
+  decoder_tcn_repeats: 1
+  discriminator:
+    n_ffts: [256, 512]
+    hop_ratio: 0.25
+    channels: [16, 32, 64]
+  schedule:                   # fire all three stages quickly for smoke
+    rep_from_epoch: 1
+    gan_from_epoch: 2
+    rep_weight: 0.05
+    gan_weight: 0.1
+
+# ---- training: short, cheap ---------------------------------------
+training:
+  trainer:
+    max_epochs: 3
+    precision: 32-true        # safer on CPU / old GPUs
+    accelerator: auto
+    devices: auto
+    log_every_n_steps: 10
+    gradient_clip_val: 5.0
+  dataloader:
+    batch_size: 2
+    num_workers: 0            # keep deterministic on laptops
+    persistent_workers: false
+  early_stop:
+    enabled: false            # too short for early stopping
+  checkpoint:
+    save_top_k: 1
+    save_last: true
+  logger:
+    name: csv
+    save_dir: outputs/logs

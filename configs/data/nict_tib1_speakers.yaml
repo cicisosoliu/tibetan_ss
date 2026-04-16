@@ -1,0 +1,34 @@
+# NICT-Tib1 speaker → gender mapping.
+#
+# The official dataset does not encode gender in folder / file names (speakers
+# are plain 3-digit IDs), so we need an explicit mapping. The values below
+# were obtained by running YIN-based F0 estimation on 3 utterances per speaker
+# (see `scripts/data/estimate_gender.py` for the one-shot script); they match
+# the README's statement of 8 men + 12 women.
+#
+# If you verified and would like to override any label, just edit the value.
+# Use "M" / "F" / "U" (unknown). "U" speakers are skipped by split.
+
+# ---- Male speakers (median F0 < 165 Hz) ----
+"012": M    # F0 ≈ 134.8 Hz
+"025": M    # F0 ≈ 109.4 Hz
+"049": M    # F0 ≈ 153.1 Hz  (borderline — verify if this causes issues)
+"061": M    # F0 ≈ 112.4 Hz
+"067": M    # F0 ≈ 133.6 Hz
+"070": M    # F0 ≈ 127.2 Hz
+"074": M    # F0 ≈ 140.6 Hz
+"077": M    # F0 ≈ 119.6 Hz
+
+# ---- Female speakers (median F0 ≥ 165 Hz) ----
+"006": F    # F0 ≈ 213.0 Hz
+"007": F    # F0 ≈ 230.0 Hz
+"009": F    # F0 ≈ 235.4 Hz
+"010": F    # F0 ≈ 205.6 Hz
+"013": F    # F0 ≈ 212.9 Hz
+"017": F    # F0 ≈ 226.8 Hz
+"019": F    # F0 ≈ 215.9 Hz
+"024": F    # F0 ≈ 241.3 Hz
+"045": F    # F0 ≈ 232.2 Hz
+"050": F    # F0 ≈ 204.9 Hz
+"054": F    # F0 ≈ 244.1 Hz
+"072": F    # F0 ≈ 213.5 Hz

@@ -1,0 +1,26 @@
+# Dual-path Mamba on NICT-Tib1 + DEMAND, formal training.
+# NOTE: requires CUDA + mamba-ssm + causal-conv1d + speechbrain installed.
+defaults:
+  - /data:     nict_tib1_full
+  - /model:    dual_path_mamba
+  - /training: default
+  - _self_
+
+tag: baseline_dual_path_mamba_nict
+engine: standard
+seed: 20260415
+
+# Override the default 8 kHz / kernel_size=16 of the model config to match
+# NICT-Tib1's 16 kHz sampling rate.
+model:
+  kernel_size: 32
+  chunk_size: 400
+
+training:
+  trainer:
+    max_epochs: 200
+    precision: 16-mixed
+  dataloader:
+    batch_size: 2
+  logger:
+    name: tensorboard

@@ -1,0 +1,27 @@
+# NICT-Tib1 — full-scale data preset (dynamic mixing + DEMAND noise).
+#
+# Differences vs. nict_tib1.yaml (smoke):
+#   - noise.enabled: true              (DEMAND must be downloaded + DEMAND_ROOT set)
+#   - offline.num_mixtures.val:  3000  (vs 200)
+#   - offline.num_mixtures.test: 3000  (vs 200)
+#   - dynamic_mixing.cache_per_epoch: 20000  (vs 2000)
+#
+# Train still uses dynamic mixing (offline.num_mixtures.train = 0) so no
+# pre-generation cost for the training set.
+
+defaults:
+  - nict_tib1
+
+noise:
+  enabled: true
+  prob_apply: 1.0
+
+offline:
+  num_mixtures:
+    train: 0
+    val:   3000
+    test:  3000
+
+dynamic_mixing:
+  enabled: true
+  cache_per_epoch: 20000

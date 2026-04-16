@@ -1,0 +1,55 @@
+# NICT-Tib1 (local) — 16 kHz, dynamic mixing for train, tiny offline val/test.
+# Use this preset for local smoke tests & early experimentation.
+#
+# Assumes:
+#   - TIBETAN_ROOT points at the root that contains `data/`, `wav.scp`, `label.txt`
+#     (i.e. `tibetan_ss/Tibetan/` in your workspace).
+#   - DEMAND_ROOT is optional; if not set, noise is disabled.
+
+defaults:
+  - default
+
+paths:
+  tibetan_root: ${oc.env:TIBETAN_ROOT,${oc.env:PWD}/Tibetan}
+  noise_root:   ${oc.env:DEMAND_ROOT,""}
+  output_root:  ${oc.env:TIBETAN_SS_OUTPUT,./data}
+
+sample_rate: 16000
+
+# NICT-Tib1 speaker IDs are 3-digit numeric folders under <tibetan_root>/data/.
+# Gender can't be derived from names, so we provide an explicit map.
+speaker_source:
+  kind: nict_tib1
+  # Path to the gender map YAML. Relative paths are resolved against two
+  # candidates in order: (1) cwd, (2) this config file's own directory.
+  gender_map: configs/data/nict_tib1_speakers.yaml
+  # Where speaker directories live. Either "data" (NICT-Tib1 default) or "." (root).
+  data_subdir: data
+
+speaker_split:
+  # NICT-Tib1 = 8 M + 12 F. Split follows the PPT plan: train=6+8, val=1+2, test=1+2.
+  train: {male: 6, female: 8}
+  val:   {male: 1, female: 2}
+  test:  {male: 1, female: 2}
+  seed: 20260415
+
+# For the smoke test we only generate a tiny val/test; train is fully dynamic
+# so no pre-rendered mixtures are needed on disk.
+offline:
+  num_mixtures:
+    train: 0        # 0 → skip offline generation for train (DM handles it online)
+    val:   200
+    test:  200
+  output_subdir: mixtures
+  manifest_subdir: manifests
+  audio_format: wav
+  audio_subtype: PCM_16
+  seed: 20260415
+
+noise:
+  enabled: false     # DEMAND not yet downloaded on this machine – flip to true later
+  prob_apply: 1.0
+
+dynamic_mixing:
+  enabled: true
+  cache_per_epoch: 2000    # smoke: 2 k online mixtures per epoch

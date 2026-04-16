@@ -119,6 +119,8 @@ scripts/run_all.sh
 
 参考资料：
 
+- **本地冒烟测试（NICT-Tib1 + Dynamic Mixing）** → [docs/smoke_nict_tib1.md](docs/smoke_nict_tib1.md)
+- **从冒烟升级到正式训练（DEMAND + 200 epoch）** → [docs/full_training.md](docs/full_training.md)
 - 数据管道、说话人划分、标签规则 → [docs/data_pipeline.md](docs/data_pipeline.md)
 - 每个模型的架构说明、依赖安装、默认超参 → [docs/models.md](docs/models.md)
 - 从零复现实验的命令列表 → [docs/reproduce.md](docs/reproduce.md)

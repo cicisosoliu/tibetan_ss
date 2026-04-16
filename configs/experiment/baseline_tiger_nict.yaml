@@ -1,0 +1,19 @@
+# TIGER on NICT-Tib1 + DEMAND, formal training.
+defaults:
+  - /data:     nict_tib1_full
+  - /model:    tiger
+  - /training: default
+  - _self_
+
+tag: baseline_tiger_nict
+engine: standard
+seed: 20260415
+
+training:
+  trainer:
+    max_epochs: 200
+    precision: 16-mixed
+  dataloader:
+    batch_size: 4
+  logger:
+    name: tensorboard

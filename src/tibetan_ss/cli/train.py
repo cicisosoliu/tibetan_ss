@@ -16,6 +16,7 @@ from ..data import TibetanMixDataModule
 from ..engine import ProposedGANModule, SeparationModule
 from ..models import build_model
 from ..utils import get_logger, set_seed
+from ..utils.config import resolve_defaults as _resolve_defaults_shared
 
 
 def _build_logger(cfg: dict, save_dir: Path) -> pl.pytorch.loggers.Logger:
@@ -133,26 +134,8 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 def _resolve_defaults(cfg, cfg_path: Path):
-    root = cfg_path.parent.parent           # configs/experiment/foo.yaml → configs/
-    if "defaults" not in cfg:
-        return cfg
-    defaults = cfg.pop("defaults")
-    merged = OmegaConf.create({})
-    for d in defaults:
-        if isinstance(d, str) and d == "_self_":
-            merged = OmegaConf.merge(merged, cfg)
-            continue
-        if not isinstance(d, dict):
-            d = OmegaConf.to_container(d)
-        key, value = next(iter(d.items()))
-        key = key.lstrip("/")
-        sub_path = root / key / f"{value}.yaml"
-        sub = OmegaConf.load(sub_path)
-        sub = _resolve_defaults(sub, sub_path)
-        merged = OmegaConf.merge(merged, OmegaConf.create({key: sub}))
-    if cfg and "_self_" not in [d for d in defaults if isinstance(d, str)]:
-        merged = OmegaConf.merge(merged, cfg)
-    return merged
+    """Hydra-lite defaults resolver (shared with data-prep scripts)."""
+    return _resolve_defaults_shared(cfg, cfg_path)
 
 
 if __name__ == "__main__":

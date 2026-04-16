@@ -1,0 +1,48 @@
+# Formal training run: proposed model on NICT-Tib1 + DEMAND, 200 epochs.
+#
+# Uses the full-sized proposed model (configs/model/proposed.yaml untouched)
+# and enables all three training stages on their default schedule.
+#
+# Pre-requisites:
+#   1) NICT-Tib1 downloaded to $TIBETAN_ROOT (default: repo_root/Tibetan)
+#   2) DEMAND (16 kHz) downloaded via scripts/download_demand.sh, DEMAND_ROOT set
+#   3) Data prepared: scripts/prepare_data.sh configs/data/nict_tib1_full.yaml
+
+defaults:
+  - /data:     nict_tib1_full
+  - /model:    proposed
+  - /training: default
+  - _self_
+
+tag: proposed_formal
+engine: gan
+seed: 20260415
+
+training:
+  trainer:
+    max_epochs: 200
+    precision: 16-mixed          # fp16 on most modern NVIDIA GPUs; switch to
+                                 # bf16-mixed on A100/H100, 32-true on CPU
+    accelerator: auto
+    devices: auto
+    gradient_clip_val: 5.0       # note: manual-optimization GAN module clips internally
+    log_every_n_steps: 50
+  dataloader:
+    batch_size: 4
+    num_workers: 4
+    persistent_workers: true
+    pin_memory: true
+  early_stop:
+    enabled: true
+    monitor: val/si_sdri
+    mode: max
+    patience: 20
+  checkpoint:
+    monitor: val/si_sdri
+    mode: max
+    save_top_k: 3
+    save_last: true
+  logger:
+    name: tensorboard            # `csv` also works; tensorboard gives live curves
+    save_dir: outputs/logs
+  eval_metrics: [si_sdr, si_sdri, pesq_wb, stoi]

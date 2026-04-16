@@ -73,7 +73,8 @@ def main() -> None:
 
     if OmegaConf is None:
         raise RuntimeError("omegaconf is required")
-    cfg = OmegaConf.to_container(OmegaConf.load(args.config), resolve=True)
+    from tibetan_ss.utils.config import load_config
+    cfg = load_config(args.config)
     sr = int(cfg["sample_rate"])
     out_root = Path(args.override_output_root or cfg["paths"]["output_root"])
     mix_root = out_root / cfg["offline"]["output_subdir"]
@@ -91,6 +92,14 @@ def main() -> None:
         mixing_cfg = _build_mixing_cfg(cfg, split, sr)
         simulator = MixtureSimulator(mixing_cfg)
         n = int(cfg["offline"]["num_mixtures"][split])
+        if n <= 0:
+            print(f"[mix] skip {split} (num_mixtures={n}; covered by dynamic mixing)")
+            # Still write an empty manifest so the DataModule's static loader has
+            # something to look at if someone toggles dynamic_mixing off later.
+            manifest_path = manifests / f"{split}.json"
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump({"split": split, "items": [], "sample_rate": sr}, f, indent=2, ensure_ascii=False)
+            continue
         seed = int(cfg["offline"]["seed"]) + _SPLIT_SEED[split]
         rng = np.random.default_rng(seed)
         py_rng = random.Random(seed)

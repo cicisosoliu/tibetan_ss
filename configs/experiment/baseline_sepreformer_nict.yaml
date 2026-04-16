@@ -1,0 +1,19 @@
+# SepReformer on NICT-Tib1 + DEMAND, formal training.
+defaults:
+  - /data:     nict_tib1_full
+  - /model:    sepreformer
+  - /training: default
+  - _self_
+
+tag: baseline_sepreformer_nict
+engine: standard
+seed: 20260415
+
+training:
+  trainer:
+    max_epochs: 200
+    precision: 16-mixed
+  dataloader:
+    batch_size: 2        # SepReformer is memory-heavy at 16 kHz
+  logger:
+    name: tensorboard
