@@ -51,8 +51,9 @@ def pesq_batch(est: torch.Tensor, ref: torch.Tensor, sample_rate: int,
         # we only support 8k / 16k PESQ
         return torch.full(est.shape[:2], float("nan"))
 
-    est_np = est.detach().cpu().numpy()
-    ref_np = ref.detach().cpu().numpy()
+    # .float() handles bf16 / fp16 → numpy (which doesn't support those dtypes)
+    est_np = est.detach().float().cpu().numpy()
+    ref_np = ref.detach().float().cpu().numpy()
     B, C, _ = est_np.shape
     out = np.full((B, C), np.nan, dtype=np.float32)
     for b in range(B):
@@ -71,8 +72,8 @@ def stoi_batch(est: torch.Tensor, ref: torch.Tensor, sample_rate: int,
         from pystoi.stoi import stoi as _stoi
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("install `pystoi` to enable STOI metric") from e
-    est_np = est.detach().cpu().numpy()
-    ref_np = ref.detach().cpu().numpy()
+    est_np = est.detach().float().cpu().numpy()
+    ref_np = ref.detach().float().cpu().numpy()
     B, C, _ = est_np.shape
     out = np.full((B, C), np.nan, dtype=np.float32)
     for b in range(B):
