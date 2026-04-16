@@ -11,13 +11,27 @@
 #   └── TMETRO/...
 #
 # 17 categories are available at 16 kHz (SCAFE only ships at 48 kHz upstream –
-# we skip it by default to avoid a sample-rate mismatch; pass
-# --include-scafe to download the 48 k version and resample).
+# we skip it by default; set INCLUDE_SCAFE=1 to also grab the 48k version).
 #
 # Total on-disk footprint: ~1.5 GB zipped + ~2.5 GB extracted.
 #
 # Usage:
 #   scripts/download_demand.sh [/optional/target/dir]
+#
+# Network-aware behaviour (safe against flaky connections):
+#   * curl --continue-at - resumes any partial .zip on disk
+#   * --speed-time / --speed-limit aborts stalled connections
+#   * each category gets MAX_ATTEMPTS outer retries
+#   * every .zip is integrity-checked with `unzip -t` before we trust it;
+#     truncated/garbled files are re-fetched automatically
+#
+# Tunables (export as env vars to override):
+#   MAX_ATTEMPTS=5      outer retries per file
+#   RETRY_DELAY=10      seconds between outer retries
+#   SPEED_TIME=30       seconds of low throughput before curl gives up
+#   SPEED_LIMIT=1024    bytes/sec – below this the connection is "stalled"
+#   KEEP_ZIPS=1         keep .zip files after extraction (default 1)
+#   INCLUDE_SCAFE=0     also fetch SCAFE_48k.zip (default 0)
 #
 # If no target dir is given, uses $DEMAND_ROOT; if that's unset, defaults to
 # $REPO_ROOT/DEMAND.
@@ -59,6 +73,38 @@ need_tool() {
 need_tool curl
 need_tool unzip
 
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"           # outer retries per category
+RETRY_DELAY="${RETRY_DELAY:-10}"            # seconds between outer retries
+SPEED_TIME="${SPEED_TIME:-30}"              # abort if <SPEED_LIMIT B/s for this many seconds
+SPEED_LIMIT="${SPEED_LIMIT:-1024}"          # minimum acceptable bytes/sec
+
+# ---------------------------------------------------------------------------
+# Return 0 if the local zip passes `unzip -t`, non-zero otherwise.
+# We also treat an empty / tiny file as corrupt so we don't waste curl calls
+# trying to "resume" a 0-byte file with a server that mis-handles range.
+# ---------------------------------------------------------------------------
+zip_is_valid() {
+    local f="$1"
+    [[ -s "$f" ]] || return 1
+    # --test is quiet and exits non-zero on any structural problem.
+    unzip -tq "$f" >/dev/null 2>&1
+}
+
+# ---------------------------------------------------------------------------
+# Fetch a Content-Length for the remote URL (follows redirects). Prints the
+# value on stdout; empty string if the server doesn't report it or on error.
+# ---------------------------------------------------------------------------
+remote_size() {
+    local url="$1"
+    local size
+    size="$(curl --silent --location --head \
+                 --write-out '%{size_download}\n%{header_json}' \
+                 --output /dev/null "$url" 2>/dev/null \
+            | sed -n 's/.*[Cc]ontent-[Ll]ength": *"\?\([0-9][0-9]*\)"\?.*/\1/p' \
+            | tail -n1)"
+    echo "${size:-}"
+}
+
 download_one() {
     local name="$1"
     local zip_url="$2"
@@ -69,13 +115,61 @@ download_one() {
         return 0
     fi
 
-    if [[ ! -f "$zip_path" ]]; then
-        echo "[demand] downloading $name …"
-        # curl -C - resumes partial downloads; -L follows Zenodo's redirect.
-        curl --fail --location --retry 3 --continue-at - \
-             --output "$zip_path" "$zip_url"
+    # Fast-path: if we've already got a valid zip on disk, just go to unpack.
+    if [[ -f "$zip_path" ]] && zip_is_valid "$zip_path"; then
+        echo "[demand] $zip_path exists and passes integrity check — skip download"
     else
-        echo "[demand] $zip_path already on disk — skipping download"
+        # Retry loop: each attempt uses `curl -C -` to resume partial content.
+        # HTTP 416 (range not satisfiable — file already full) is treated as a
+        # success provided `unzip -t` agrees.
+        local attempt rc
+        for (( attempt = 1; attempt <= MAX_ATTEMPTS; attempt++ )); do
+            if [[ -f "$zip_path" ]]; then
+                echo "[demand] resuming $name (attempt $attempt/$MAX_ATTEMPTS, $(du -h "$zip_path" | cut -f1) already on disk) …"
+            else
+                echo "[demand] downloading $name (attempt $attempt/$MAX_ATTEMPTS) …"
+            fi
+
+            rc=0
+            curl --fail --location \
+                 --retry 3 --retry-delay 5 \
+                 --speed-time "$SPEED_TIME" --speed-limit "$SPEED_LIMIT" \
+                 --continue-at - \
+                 --output "$zip_path" "$zip_url" \
+                 || rc=$?
+
+            # rc=22 == HTTP error from server. Most common cause during
+            # resume: 416 "Range Not Satisfiable" when local file is already
+            # complete. If the zip passes integrity check, we're done.
+            if [[ $rc -eq 0 ]] && zip_is_valid "$zip_path"; then
+                break
+            fi
+            if [[ $rc -eq 22 ]] && zip_is_valid "$zip_path"; then
+                echo "[demand] server returned 416 but local file is complete — OK"
+                break
+            fi
+
+            # The download ended but the file is corrupt/truncated. Decide
+            # whether to keep attempting resume or start over.
+            if [[ -f "$zip_path" ]] && ! zip_is_valid "$zip_path"; then
+                local local_size remote_len
+                local_size="$(stat -c %s "$zip_path" 2>/dev/null || stat -f %z "$zip_path" 2>/dev/null || echo 0)"
+                remote_len="$(remote_size "$zip_url")"
+                if [[ -n "$remote_len" ]] && [[ "$local_size" -gt "$remote_len" ]]; then
+                    echo "[demand] local file ($local_size B) is larger than remote ($remote_len B) — starting over"
+                    rm -f "$zip_path"
+                fi
+            fi
+
+            echo "[demand] attempt $attempt failed (curl rc=$rc); waiting ${RETRY_DELAY}s …" >&2
+            sleep "$RETRY_DELAY"
+        done
+
+        if ! zip_is_valid "$zip_path"; then
+            echo "[demand] ERROR: $zip_path still corrupt after $MAX_ATTEMPTS attempts." >&2
+            echo "         Delete it manually and re-run:  rm '$(pwd)/$zip_path'" >&2
+            return 1
+        fi
     fi
 
     echo "[demand] unpacking $name …"
@@ -84,7 +178,6 @@ download_one() {
     #   DEMAND/<CATEGORY>/  ← desired
     # If the zip produced something else, move it into place.
     if [[ ! -d "$name" ]]; then
-        # hunt for a dir that contains ch01.wav
         local found
         found="$(find . -maxdepth 3 -type f -name 'ch01.wav' -path "*/${name}/*" -print -quit || true)"
         if [[ -n "$found" ]]; then
@@ -108,9 +201,13 @@ if [[ "$INCLUDE_SCAFE" == "1" ]]; then
     echo "    done"
 fi
 
-# cleanup zips (keep them? comment out if you want)
-echo "[demand] removing zip files (extracted wavs preserved)"
-rm -f ./*.zip
+KEEP_ZIPS="${KEEP_ZIPS:-1}"
+if [[ "$KEEP_ZIPS" != "1" ]]; then
+    echo "[demand] removing zip files (extracted wavs preserved)"
+    rm -f ./*.zip
+else
+    echo "[demand] keeping .zip files on disk — set KEEP_ZIPS=0 to delete"
+fi
 
 TOTAL_WAVS="$(find . -name '*.wav' | wc -l | tr -d ' ')"
 echo "==========================================================="
