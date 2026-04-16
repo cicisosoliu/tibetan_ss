@@ -108,7 +108,10 @@ class ProposedGANModule(pl.LightningModule):
         self.manual_backward(total)
         clip = float(self.training_cfg["trainer"].get("gradient_clip_val", 0.0))
         if clip > 0:
-            self.clip_gradients(opt_g, gradient_clip_val=clip, gradient_clip_algorithm="norm")
+            # Use torch directly (not self.clip_gradients) because the Trainer
+            # is configured *without* gradient_clip_val when this module is
+            # running — passing both would raise a MisconfigurationException.
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip)
         opt_g.step()
         self.log("train/loss", total, on_step=True, on_epoch=True, prog_bar=True,
                  batch_size=batch["mixture"].shape[0])

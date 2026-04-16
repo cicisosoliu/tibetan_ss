@@ -115,13 +115,12 @@ def main() -> None:
     pl_logger = _build_logger(cfg["training"], save_dir)
     callbacks = _build_callbacks(cfg["training"], save_dir)
     tr = cfg["training"]["trainer"]
-    trainer = pl.Trainer(
+    trainer_kwargs = dict(
         max_epochs=int(tr["max_epochs"]),
         precision=str(tr.get("precision", "16-mixed")),
         accelerator=str(tr.get("accelerator", "auto")),
         devices=tr.get("devices", "auto"),
         strategy=tr.get("strategy", "auto"),
-        gradient_clip_val=float(tr.get("gradient_clip_val", 0.0)) if engine_name == "standard" else 0.0,
         accumulate_grad_batches=int(tr.get("accumulate_grad_batches", 1)),
         log_every_n_steps=int(tr.get("log_every_n_steps", 50)),
         deterministic=bool(tr.get("deterministic", False)),
@@ -129,6 +128,13 @@ def main() -> None:
         callbacks=callbacks,
         default_root_dir=str(save_dir),
     )
+    # Lightning's auto-clipping is only engaged for the ``standard`` engine.
+    # The GAN engine uses manual optimization and handles clipping inside
+    # ``ProposedGANModule.training_step`` — passing gradient_clip_val here
+    # would conflict with that path (MisconfigurationException).
+    if engine_name == "standard":
+        trainer_kwargs["gradient_clip_val"] = float(tr.get("gradient_clip_val", 0.0))
+    trainer = pl.Trainer(**trainer_kwargs)
     trainer.fit(pl_module, datamodule=datamodule)
     trainer.test(pl_module, datamodule=datamodule, ckpt_path="best")
 
