@@ -95,8 +95,14 @@ def main() -> None:
     elif engine_name == "gan":
         disc_cfg = cfg["model"].get("discriminator", {})
         sched_cfg = cfg["model"].get("schedule", {})
+        # `disc_lr` is declared at the model level in configs/model/proposed.yaml
+        # but consumed by ProposedGANModule.configure_optimizers via training_cfg,
+        # so surface it here.
+        training_cfg = dict(cfg["training"])
+        if "disc_lr" in cfg["model"]:
+            training_cfg["disc_lr"] = cfg["model"]["disc_lr"]
         pl_module = ProposedGANModule(
-            model=model, training_cfg=cfg["training"],
+            model=model, training_cfg=training_cfg,
             sample_rate=int(cfg["data"]["sample_rate"]),
             discriminator_cfg=disc_cfg, schedule_cfg=sched_cfg,
             eval_metrics=tuple(cfg["training"].get("eval_metrics",

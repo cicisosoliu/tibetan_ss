@@ -10,7 +10,7 @@ Wires the pieces together so the trainer can call::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import torch
 import torch.nn as nn
@@ -56,7 +56,11 @@ class ProposedEarlySeparation(BaseSeparator):
                  config: ProposedConfig | dict | None = None):
         super().__init__(num_speakers=num_speakers, sample_rate=sample_rate)
         if isinstance(config, dict):
-            config = ProposedConfig(**config)
+            # Filter to only the fields ProposedConfig knows about; the YAML
+            # also carries `discriminator` / `schedule` / `disc_lr` for the
+            # training module, which must not reach the dataclass.
+            allowed = {f.name for f in fields(ProposedConfig)}
+            config = ProposedConfig(**{k: v for k, v in config.items() if k in allowed})
         cfg = config or ProposedConfig()
         self.cfg = cfg
         self.encoder = SharedEncoder(

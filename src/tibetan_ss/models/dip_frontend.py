@@ -24,7 +24,7 @@ separator). Toggle via ``freeze_frontend: bool`` in the config.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import torch
 import torch.nn as nn
@@ -78,7 +78,8 @@ class DIPSeparator(BaseSeparator):
                  config: DIPConfig | dict | None = None):
         super().__init__(num_speakers=num_speakers, sample_rate=sample_rate)
         if isinstance(config, dict):
-            config = DIPConfig(**config)
+            allowed = {f.name for f in fields(DIPConfig)}
+            config = DIPConfig(**{k: v for k, v in config.items() if k in allowed})
         cfg = config or DIPConfig()
         self.cfg = cfg
 
