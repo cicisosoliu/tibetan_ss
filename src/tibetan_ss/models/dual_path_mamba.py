@@ -40,6 +40,28 @@ def _build_native(
     skip_around_intra: bool,
 ) -> nn.Module:
     register_thirdparty("Mamba-TasNet")
+
+    # ---- Fix: mamba-ssm >= 2.0 moved RMSNorm; upstream repo still tries the
+    # old path, gets None, then partial(None, ...) → TypeError.  We patch it
+    # before anything else imports the module. ---
+    import modules.mamba_blocks as _mb
+    if _mb.RMSNorm is None:
+        try:
+            from mamba_ssm.ops.triton.layer_norm import RMSNorm
+            _mb.RMSNorm = RMSNorm
+        except ImportError:
+            class _RMSNorm(nn.Module):
+                def __init__(self, hidden_size, eps=1e-6, **kwargs):
+                    super().__init__()
+                    self.weight = nn.Parameter(torch.ones(hidden_size))
+                    self.eps = eps
+                def forward(self, x):
+                    x_f = x.float()
+                    return (self.weight * x_f * torch.rsqrt(
+                        x_f.pow(2).mean(-1, keepdim=True) + self.eps
+                    )).to(x.dtype)
+            _mb.RMSNorm = _RMSNorm
+
     from speechbrain.lobes.models.dual_path import (
         Dual_Path_Model,
         Decoder,
