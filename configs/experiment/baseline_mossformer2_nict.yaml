@@ -13,7 +13,7 @@ seed: 20260415
 training:
   trainer:
     max_epochs: 200
-    precision: bf16-mixed
+    precision: 16-mixed
     accumulate_grad_batches: 2       # effective batch = 4 at batch_size=2
   dataloader:
     batch_size: 2                    # MossFormer2-L is heavy

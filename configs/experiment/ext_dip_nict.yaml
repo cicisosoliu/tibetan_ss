@@ -12,7 +12,7 @@ seed: 20260415
 training:
   trainer:
     max_epochs: 200
-    precision: bf16-mixed
+    precision: 16-mixed
   dataloader:
     batch_size: 4
   logger:

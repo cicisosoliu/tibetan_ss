@@ -21,7 +21,7 @@ seed: 20260415
 training:
   trainer:
     max_epochs: 200
-    precision: bf16-mixed        # fp16 on most modern NVIDIA GPUs; switch to
+    precision: 16-mixed         # fp16 on most modern NVIDIA GPUs; switch to
                                  # bf16-mixed on A100/H100, 32-true on CPU
     accelerator: auto
     devices: auto

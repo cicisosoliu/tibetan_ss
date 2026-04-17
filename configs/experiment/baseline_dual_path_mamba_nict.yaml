@@ -19,7 +19,7 @@ model:
 training:
   trainer:
     max_epochs: 200
-    precision: bf16-mixed
+    precision: 16-mixed
   dataloader:
     batch_size: 2
   logger:

@@ -69,6 +69,8 @@ def main() -> None:
     p.add_argument("--config", required=True)
     p.add_argument("--splits", nargs="+", default=["train", "val", "test"])
     p.add_argument("--override-output-root", default=None)
+    p.add_argument("--force", action="store_true",
+                   help="Regenerate even if <split>.json already has the expected item count.")
     args = p.parse_args()
 
     if OmegaConf is None:
@@ -100,6 +102,22 @@ def main() -> None:
             with open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump({"split": split, "items": [], "sample_rate": sr}, f, indent=2, ensure_ascii=False)
             continue
+
+        manifest_path = manifests / f"{split}.json"
+        # Skip splits whose manifest is already complete unless --force is set.
+        # This makes `prepare_data.sh` safe to re-run after a partial failure:
+        # completed splits are touched zero times, only the failed split is redone.
+        if not args.force and manifest_path.exists():
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if len(existing.get("items", [])) >= n:
+                    print(f"[mix] {split}.json already has {len(existing['items'])} items "
+                          f"(>= {n}) — skip (pass --force to regenerate)")
+                    continue
+            except Exception as e:
+                print(f"[mix] {split}.json unreadable ({e}); will regenerate")
+
         seed = int(cfg["offline"]["seed"]) + _SPLIT_SEED[split]
         rng = np.random.default_rng(seed)
         py_rng = random.Random(seed)
