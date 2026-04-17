@@ -1,104 +1,92 @@
 """Adapter for MossFormer2 (Zhao et al., ICASSP 2024).
 
-MossFormer2 is maintained by the SpeechBrain community. The upstream
-class path has changed a couple of times across SpeechBrain releases, so
-this adapter tries a sequence of known import locations. If none of them
-works, the error message lists the paths that were tried.
+Official standalone code: https://github.com/alibabasglab/MossFormer2
+(MossFormer2 is NOT part of SpeechBrain core — it's maintained by Alibaba DAMO.)
+
+Clone the repo into ``third_party/``:
 
 .. code-block:: bash
 
-    pip install speechbrain
+    cd third_party
+    git clone --depth 1 https://github.com/alibabasglab/MossFormer2.git
 
-Usage from the registry::
+Extra pip dependency:
 
-    build_model({"name": "mossformer2", "sample_rate": 16000, "variant": "L"})
+.. code-block:: bash
 
-Supported variants:
-* ``S`` – "small",   ≈ 2 M  params   (suits quick Tibetan experiments)
-* ``L`` – "large",   ≈ 42 M params   (paper numbers)
+    pip install rotary_embedding_torch huggingface_hub
 """
 
 from __future__ import annotations
 
-import importlib
 from typing import Any
 
 import torch
 import torch.nn as nn
 
+from ._thirdparty_path import register_thirdparty
 from .base import BaseSeparator
 from .registry import register
 
-_CANDIDATE_PATHS = [
-    # Path in recent SpeechBrain releases (>= 1.0):
-    "speechbrain.lobes.models.mossformer.MossFormer2",
-    "speechbrain.lobes.models.mossformer.MossFormer2_SS_16K",
-    "speechbrain.lobes.models.mossformer.MossFormer2_SS_8K",
-    # Fallback to the monolithic MossFormer block + conv-tasnet outer:
-    "speechbrain.lobes.models.mossformer2.MossFormer2",
-    "speechbrain.lobes.models.mossformer2.MossFormer2Block",
-]
 
-
-def _import_mossformer() -> tuple[str, Any]:
-    last_err: Exception | None = None
-    for dotted in _CANDIDATE_PATHS:
-        mod_path, _, attr = dotted.rpartition(".")
-        try:
-            mod = importlib.import_module(mod_path)
-            if hasattr(mod, attr):
-                return dotted, getattr(mod, attr)
-        except Exception as e:                    # pragma: no cover
-            last_err = e
-    msg = (
-        "Could not locate MossFormer2 in this SpeechBrain install. Tried:\n"
-        + "\n".join(f"  - {p}" for p in _CANDIDATE_PATHS)
-        + "\n\nInstall/upgrade SpeechBrain or copy the upstream MossFormer2 "
-        "module into `third_party/mossformer2/` and update _CANDIDATE_PATHS."
-    )
-    raise ImportError(msg) from last_err
+# Default config — matches ``mossformer2_librimix_2spk`` from upstream but
+# lets us override num_spks and sample_rate via our YAML.
+_DEFAULT_CONFIG = {
+    "model_type": "mossformer2",
+    "config_name": "mossformer2-tibetan-2spk",
+    "sample_rate": 8000,
+    "encoder_kernel_size": 16,
+    "encoder_out_nchannels": 512,
+    "encoder_in_nchannels": 1,
+    "masknet_numspks": 2,
+    "masknet_chunksize": 250,
+    "masknet_numlayers": 1,
+    "masknet_norm": "ln",
+    "masknet_useextralinearlayer": False,
+    "masknet_extraskipconnection": True,
+    "intra_numlayers": 24,
+    "intra_nhead": 8,
+    "intra_dffn": 1024,
+    "intra_dropout": 0,
+    "intra_use_positional": True,
+    "intra_norm_before": True,
+}
 
 
 class MossFormer2Adapter(BaseSeparator):
-    """Wraps MossFormer2 as a ``BaseSeparator``.
+    """Wraps ``Mossformer2Wrapper`` from the official standalone repo.
 
-    Different upstream class variants return different shapes — some return
-    ``(B, T, num_spks)`` while others return ``(B, num_spks, T)``. The adapter
-    normalises both to ``(B, num_spks, T)``.
+    The upstream forward returns ``(B, T, num_spks)``; we transpose to our
+    standard ``(B, num_spks, T)`` contract.
     """
 
     def __init__(self, sample_rate: int = 16000, num_speakers: int = 2,
                  variant: str = "L", **kwargs: Any):
         super().__init__(num_speakers=num_speakers, sample_rate=sample_rate)
-        dotted, cls = _import_mossformer()
-        # Several construction signatures exist – try the most common first.
-        try:
-            self.model = cls(num_spks=num_speakers, **kwargs)
-        except TypeError:
-            try:
-                self.model = cls(sample_rate=sample_rate, num_spks=num_speakers, **kwargs)
-            except TypeError:
-                self.model = cls(**kwargs)
-        self._upstream_path = dotted
+        repo_path = register_thirdparty("MossFormer2")
+        import sys
+        standalone = str(repo_path / "MossFormer2_standalone")
+        if standalone not in sys.path:
+            sys.path.insert(0, standalone)
+
+        from model.mossformer2 import Mossformer2Wrapper
+
+        cfg = dict(_DEFAULT_CONFIG)
+        cfg["masknet_numspks"] = num_speakers
+        cfg["sample_rate"] = sample_rate
+        if sample_rate >= 16000:
+            cfg["encoder_kernel_size"] = 32
+            cfg["masknet_chunksize"] = 400
+        for k, v in kwargs.items():
+            if k in cfg:
+                cfg[k] = v
+        self.model = Mossformer2Wrapper(config=cfg)
         self.variant = variant
 
     def forward(self, mixture: torch.Tensor) -> torch.Tensor:
-        mix = self._prepare_input(mixture)
-        out = self.model(mix)
-        if isinstance(out, (list, tuple)):
-            out = out[0]
-        if out.ndim == 3:
-            # Detect the speaker axis by position.
-            B, A, B2 = out.shape
-            if A == self.num_speakers:
-                pass
-            elif B2 == self.num_speakers:
-                out = out.transpose(1, 2).contiguous()
-            else:
-                # Fall back: assume (B, num_spks, T)
-                pass
-        else:
-            raise RuntimeError(f"Unexpected MossFormer2 output shape: {out.shape}")
+        mix = self._prepare_input(mixture)            # (B, T)
+        out = self.model(mix)                          # (B, T, num_spks)
+        out = out.transpose(1, 2).contiguous()         # (B, num_spks, T)
         T = mix.shape[-1]
         if out.shape[-1] > T:
             out = out[..., :T]
