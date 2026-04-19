@@ -32,3 +32,5 @@ def set_seed(seed: int, deterministic: bool = False) -> None:
         torch.backends.cudnn.benchmark = False
     else:
         torch.backends.cudnn.benchmark = True
+    # H100 / A100 / 4090: use TF32 for fp32 matmul (free ~3x speedup on eligible ops)
+    torch.set_float32_matmul_precision("high")

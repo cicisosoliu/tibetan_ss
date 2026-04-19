@@ -19,8 +19,9 @@ model:
 training:
   trainer:
     max_epochs: 200
-    precision: 16-mixed
+    precision: bf16-mixed
   dataloader:
-    batch_size: 2
+    batch_size: 16
+    num_workers: 64
   logger:
     name: tensorboard

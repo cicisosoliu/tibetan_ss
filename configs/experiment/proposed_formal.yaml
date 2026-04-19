@@ -21,15 +21,15 @@ seed: 20260415
 training:
   trainer:
     max_epochs: 200
-    precision: 16-mixed         # fp16 on most modern NVIDIA GPUs; switch to
+    precision: bf16-mixed         # fp16 on most modern NVIDIA GPUs; switch to
                                  # bf16-mixed on A100/H100, 32-true on CPU
     accelerator: auto
     devices: auto
     gradient_clip_val: 5.0       # note: manual-optimization GAN module clips internally
     log_every_n_steps: 50
   dataloader:
-    batch_size: 4
-    num_workers: 4
+    batch_size: 32
+    num_workers: 64
     persistent_workers: true
     pin_memory: true
   early_stop:
