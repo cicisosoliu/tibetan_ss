@@ -17,6 +17,6 @@ training:
     accumulate_grad_batches: 2       # effective batch = 4 at batch_size=2
   dataloader:
     batch_size: 32
-    num_workers: 64                    # MossFormer2-L is heavy
+    num_workers: 48                    # MossFormer2-L is heavy
   logger:
     name: tensorboard

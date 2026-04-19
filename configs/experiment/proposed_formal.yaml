@@ -29,7 +29,7 @@ training:
     log_every_n_steps: 50
   dataloader:
     batch_size: 32
-    num_workers: 64
+    num_workers: 48
     persistent_workers: true
     pin_memory: true
   early_stop:
