@@ -37,6 +37,7 @@ GPU_COMMON=(
     training.scheduler.warmup_epochs=10
     data.preload_to_memory=true
     data.dynamic_mixing.cache_per_epoch=20000
+    compile=false
 )
 
 if [ "$DRY" = "1" ]; then
