@@ -46,8 +46,10 @@ offline:
   audio_subtype: PCM_16
   seed: 20260415
 
+preload_to_memory: true
+
 noise:
-  enabled: false     # DEMAND not yet downloaded on this machine – flip to true later
+  enabled: false
   prob_apply: 1.0
 
 dynamic_mixing:

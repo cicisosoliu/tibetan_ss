@@ -68,6 +68,11 @@ reverb:
   rir_root: null
   t60_range: [0.2, 0.8]
 
+# Pre-load all source audio into RAM at startup. Eliminates per-step disk I/O
+# for Dynamic Mixing — speeds up training 10-30x on I/O-bound setups.
+# Memory cost: ~8 GB (33.5 h speech @ 16 kHz) + ~5 GB (DEMAND noise).
+preload_to_memory: false
+
 # Offline mixture generation (run once per split)
 offline:
   num_mixtures:

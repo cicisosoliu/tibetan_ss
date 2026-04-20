@@ -12,6 +12,8 @@
 defaults:
   - nict_tib1
 
+preload_to_memory: true
+
 noise:
   enabled: true
   prob_apply: 1.0

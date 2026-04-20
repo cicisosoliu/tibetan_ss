@@ -12,10 +12,10 @@ seed: 20260415
 training:
   trainer:
     max_epochs: 200
-    precision: bf16-mixed
+    precision: bf16-mixed:
   dataloader:
-    batch_size: 32
-    num_workers: 48
+    batch_size: 8
+    num_workers: 16
   logger:
     name: tensorboard
 

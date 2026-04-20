@@ -69,6 +69,7 @@ class TibetanMixDataModule(pl.LightningDataModule):
             seg_secs = self.cfg["segment"].get(split)
             if seg_secs is not None:
                 fixed_length = int(float(seg_secs) * sr)
+        preload = bool(self.cfg.get("preload_to_memory", False))
         if dynamic and split == "train":
             return TibetanMixDataset(
                 split=split,
@@ -79,12 +80,14 @@ class TibetanMixDataModule(pl.LightningDataModule):
                 samples_per_epoch=int(self.cfg["dynamic_mixing"].get("cache_per_epoch", 20000)),
                 seed=int(self.cfg["offline"]["seed"]) + _SPLIT_SEED[split],
                 fixed_length_samples=fixed_length,
+                preload=preload,
             )
         return TibetanMixDataset(
             split=split,
             manifest_path=manifests_dir / f"{split}.json",
             seed=int(self.cfg["offline"]["seed"]) + _SPLIT_SEED[split],
             fixed_length_samples=fixed_length,
+            preload=preload,
         )
 
     # ------------------------------------------------------------------

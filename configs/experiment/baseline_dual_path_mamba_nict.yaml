@@ -22,6 +22,6 @@ training:
     precision: bf16-mixed
   dataloader:
     batch_size: 16
-    num_workers: 48
+    num_workers: 16
   logger:
     name: tensorboard
