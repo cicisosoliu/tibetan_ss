@@ -83,6 +83,11 @@ def main() -> None:
         "num_speakers": int(cfg["data"]["mixing"]["num_speakers"]),
     })
 
+    # Optional: torch.compile for 20-40% speedup on H100/A100 (PyTorch 2.x)
+    if cfg.get("compile", False):
+        logger.info("[train] applying torch.compile (first few steps will be slow due to tracing)")
+        model = torch.compile(model)
+
     # ---- lightning module --------------------------------------------
     engine_name = str(cfg.get("engine", "standard"))
     if engine_name == "standard":

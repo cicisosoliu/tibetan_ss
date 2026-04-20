@@ -15,8 +15,9 @@ training:
     max_epochs: 200
     precision: bf16-mixed
     accumulate_grad_batches: 2       # effective batch = 4 at batch_size=2
+    check_val_every_n_epoch: 5
   dataloader:
     batch_size: 16
-    num_workers: 16                    # MossFormer2-L is heavy
+    num_workers: 4                    # MossFormer2-L is heavy
   logger:
     name: tensorboard
