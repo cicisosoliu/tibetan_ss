@@ -72,14 +72,21 @@ class _CompatModule(ModuleType):
         return causal_conv1d_fwd
 
     # ------------------------------------------------------------------
-    # bwd wrappers: old 7-arg → new 9-arg
+    # bwd wrappers: old 7-arg → new 9-arg or 10-arg
     # Old: (x, w, b, dout, seq_idx, dx, silu)
-    # New: (x, w, b, dout, seq_idx, initial_states, dfinal_states, dx, silu)
+    # 9-arg: (x, w, b, dout, seq_idx, initial_states, dfinal_states, dx, silu)
+    # 10-arg: (x, w, b, dout, seq_idx, initial_states, dfinal_states, dx, silu, return_dinitial_states)
     # ------------------------------------------------------------------
     @staticmethod
     def _make_bwd_9(real_bwd):
         def causal_conv1d_bwd(x, weight, bias, dout, seq_idx, dx, silu_activation):
             return real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation)
+        return causal_conv1d_bwd
+
+    @staticmethod
+    def _make_bwd_10(real_bwd):
+        def causal_conv1d_bwd(x, weight, bias, dout, seq_idx, dx, silu_activation):
+            return real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation, False)
         return causal_conv1d_bwd
 
     def __getattr__(self, name):
@@ -91,7 +98,9 @@ class _CompatModule(ModuleType):
             self.__dict__[name] = fn  # cache
             return fn
         if name == "causal_conv1d_bwd":
-            if self._bwd_nargs > 7:
+            if self._bwd_nargs >= 10:
+                fn = self._make_bwd_10(self._real.causal_conv1d_bwd)
+            elif self._bwd_nargs > 7:
                 fn = self._make_bwd_9(self._real.causal_conv1d_bwd)
             else:
                 fn = getattr(self._real, name)
