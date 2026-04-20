@@ -229,12 +229,20 @@ def main() -> None:
         models_done=int(cfg.get("_models_done", 0)),
     )
     tr = cfg["training"]["trainer"]
+    # Resolve DDP strategy: the GAN engine has unused parameters in early
+    # stages (discriminator idle during Stage 1), so it needs
+    # find_unused_parameters=True. We auto-upgrade "ddp" → "ddp_find_unused"
+    # when engine=gan.
+    strategy = tr.get("strategy", "auto")
+    if engine_name == "gan" and str(strategy) == "ddp":
+        strategy = "ddp_find_unused_parameters_true"
+
     trainer_kwargs = dict(
         max_epochs=int(tr["max_epochs"]),
         precision=str(tr.get("precision", "16-mixed")),
         accelerator=str(tr.get("accelerator", "auto")),
         devices=tr.get("devices", "auto"),
-        strategy=tr.get("strategy", "auto"),
+        strategy=strategy,
         accumulate_grad_batches=int(tr.get("accumulate_grad_batches", 1)),
         check_val_every_n_epoch=int(tr.get("check_val_every_n_epoch", 1)),
         log_every_n_steps=int(tr.get("log_every_n_steps", 50)),
@@ -244,9 +252,6 @@ def main() -> None:
         default_root_dir=str(save_dir),
     )
     # Lightning's auto-clipping is only engaged for the ``standard`` engine.
-    # The GAN engine uses manual optimization and handles clipping inside
-    # ``ProposedGANModule.training_step`` — passing gradient_clip_val here
-    # would conflict with that path (MisconfigurationException).
     if engine_name == "standard":
         trainer_kwargs["gradient_clip_val"] = float(tr.get("gradient_clip_val", 0.0))
     trainer = pl.Trainer(**trainer_kwargs)
