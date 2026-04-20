@@ -83,7 +83,7 @@ class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
             loss_d = hinge_discriminator_loss(d_real, d_fake)
             self.manual_backward(loss_d)
             opt_d.step()
-            self.log("train/loss_d", loss_d, on_step=True, on_epoch=True, prog_bar=True,
+            self.log("train/loss_d", loss_d, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True,
                      batch_size=batch["mixture"].shape[0])
 
         # ----- Step 2: update separator --------------------------------
@@ -92,14 +92,14 @@ class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
         loss_main, perm = pit_si_sdr_loss(est, batch["sources"], return_perm=True)
         est_aligned = reorder_sources(est, perm)
         total = loss_main
-        self.log("train/loss_main", loss_main, on_step=True, on_epoch=True, prog_bar=True,
+        self.log("train/loss_main", loss_main, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True,
                  batch_size=batch["mixture"].shape[0])
 
         if self._rep_enabled:
             lam_rep = float(self.schedule_cfg.get("rep_weight", 0.05))
             loss_rep = representation_diff_loss(aux["z_a"], aux["z_b"])
             total = total + lam_rep * loss_rep
-            self.log("train/loss_rep", loss_rep, on_step=False, on_epoch=True,
+            self.log("train/loss_rep", loss_rep, on_step=False, on_epoch=True, sync_dist=True,
                      batch_size=batch["mixture"].shape[0])
 
         if self._gan_enabled:
@@ -107,7 +107,7 @@ class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
             d_fake_for_g = self.discriminator(est_aligned.reshape(-1, est_aligned.shape[-1]))
             loss_g = hinge_generator_loss(d_fake_for_g)
             total = total + lam_g * loss_g
-            self.log("train/loss_g", loss_g, on_step=False, on_epoch=True,
+            self.log("train/loss_g", loss_g, on_step=False, on_epoch=True, sync_dist=True,
                      batch_size=batch["mixture"].shape[0])
 
         self.manual_backward(total)
@@ -118,7 +118,7 @@ class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
             # running — passing both would raise a MisconfigurationException.
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip)
         opt_g.step()
-        self.log("train/loss", total, on_step=True, on_epoch=True, prog_bar=True,
+        self.log("train/loss", total, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True,
                  batch_size=batch["mixture"].shape[0])
         return total
 
