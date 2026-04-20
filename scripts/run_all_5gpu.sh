@@ -45,8 +45,9 @@ if [ "$DRY" = "1" ]; then
         data.dynamic_mixing.cache_per_epoch=200
         training.eval_metrics="[si_sdr,si_sdri]"
         test_max_audio=3
+        compile=false
     )
-    echo "[5gpu] DRY RUN: 1 epoch per model"
+    echo "[5gpu] DRY RUN: 1 epoch per model (compile disabled)"
 fi
 
 # ---- Time tracking ----

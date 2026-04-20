@@ -46,7 +46,8 @@ class SeparationModule(pl.LightningModule, TestCollectorMixin):
         loss, perm = pit_si_sdr_loss(est, ref, return_perm=True)
         est_aligned = reorder_sources(est, perm)
         self.log(f"{stage}/loss", loss, on_step=(stage == "train"),
-                 on_epoch=True, prog_bar=True, batch_size=mix.shape[0])
+                 on_epoch=True, prog_bar=True, batch_size=mix.shape[0],
+                 sync_dist=True)
         return {"loss": loss, "est": est_aligned, "ref": ref, "mix": mix}
 
     # ------------------------------------------------------------------
@@ -61,7 +62,7 @@ class SeparationModule(pl.LightningModule, TestCollectorMixin):
         for k, v in metrics.items():
             self.log(f"val/{k}", v, on_step=False, on_epoch=True,
                      prog_bar=(k in ("si_sdri", "si_sdr")),
-                     batch_size=out["mix"].shape[0])
+                     batch_size=out["mix"].shape[0], sync_dist=True)
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
         out = self._step(batch, "test")
@@ -69,7 +70,7 @@ class SeparationModule(pl.LightningModule, TestCollectorMixin):
                                  self.eval_metrics)
         for k, v in metrics.items():
             self.log(f"test/{k}", v, on_step=False, on_epoch=True,
-                     batch_size=out["mix"].shape[0])
+                     batch_size=out["mix"].shape[0], sync_dist=True)
         # Collect per-utterance results + save audio
         self._collect_test_step(batch, out["est"], out["ref"], out["mix"],
                                 self.sample_rate, self.eval_metrics)

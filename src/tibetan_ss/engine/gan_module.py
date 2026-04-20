@@ -132,10 +132,10 @@ class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
             est_aligned = reorder_sources(est, perm)
             metrics = evaluate_batch(est_aligned, ref, mix, self.sample_rate, self.eval_metrics)
         self.log(f"{stage}/loss", loss, on_step=False, on_epoch=True,
-                 prog_bar=(stage == "val"), batch_size=mix.shape[0])
+                 prog_bar=(stage == "val"), batch_size=mix.shape[0], sync_dist=True)
         for k, v in metrics.items():
             self.log(f"{stage}/{k}", v, on_step=False, on_epoch=True,
-                     prog_bar=(k == "si_sdri"), batch_size=mix.shape[0])
+                     prog_bar=(k == "si_sdri"), batch_size=mix.shape[0], sync_dist=True)
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
         self._eval_step(batch, "val")
