@@ -140,12 +140,12 @@ run_model() {
 }
 
 # --- Model definitions ---
-run_proposed()      { run_model proposed_formal               12      2.0e-3  model.disc_lr=1.0e-3; }
+run_proposed()      { run_model proposed_formal               8       2.0e-3  model.disc_lr=1.0e-3; }
 run_tiger()         { run_model baseline_tiger_nict           8       3.0e-3  ; }
 run_sepreformer()   { run_model baseline_sepreformer_nict     8       2.0e-3  ; }
-run_dpmamba()       { run_model baseline_dual_path_mamba_nict 12      3.0e-3  ; }
+run_dpmamba()       { run_model baseline_dual_path_mamba_nict 8       3.0e-3  ; }
 run_mossformer2()   { run_model baseline_mossformer2_nict     8       2.0e-3  training.trainer.accumulate_grad_batches=2; }
-run_dip()           { run_model ext_dip_nict                  12      3.0e-3  ; }
+run_dip()           { run_model ext_dip_nict                  8       3.0e-3  ; }
 
 # --- Execute ---
 if [ -n "$TARGET" ] && [ "$TARGET" != "--dry" ]; then
