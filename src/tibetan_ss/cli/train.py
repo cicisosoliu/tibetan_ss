@@ -37,6 +37,82 @@ class DynamicMixingEpochCallback(pl.Callback):
                 ds.set_epoch(trainer.current_epoch)
 
 
+class TrainingETACallback(pl.Callback):
+    """Print real-time ETA after each training epoch.
+
+    Shows: current epoch, time/epoch, ETA for this model, and (optionally)
+    ETA for the entire multi-model pipeline.
+    """
+
+    def __init__(self, tag: str = "", total_models: int = 1, models_done: int = 0):
+        super().__init__()
+        self.tag = tag
+        self.total_models = total_models
+        self.models_done = models_done
+        self._fit_start: float = 0.0
+        self._epoch_start: float = 0.0
+
+    @staticmethod
+    def _fmt(secs: float) -> str:
+        secs = max(0, int(secs))
+        h, rem = divmod(secs, 3600)
+        m, s = divmod(rem, 60)
+        if h > 0:
+            return f"{h}h{m:02d}m{s:02d}s"
+        if m > 0:
+            return f"{m}m{s:02d}s"
+        return f"{s}s"
+
+    def on_fit_start(self, trainer, pl_module):
+        import time
+        self._fit_start = time.time()
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        import time
+        self._epoch_start = time.time()
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        import time
+        now = time.time()
+        epoch = trainer.current_epoch
+        max_epochs = trainer.max_epochs
+        elapsed = now - self._fit_start
+        epoch_time = now - self._epoch_start
+        epochs_done = epoch + 1
+
+        # Average time per epoch (smoothed over all completed epochs)
+        avg_per_epoch = elapsed / max(epochs_done, 1)
+        remaining_epochs = max_epochs - epochs_done
+        eta_model = avg_per_epoch * remaining_epochs
+
+        # Metrics from the current epoch (if logged)
+        metrics_str = ""
+        for key in ("val/si_sdri", "val/loss", "train/loss"):
+            val = trainer.callback_metrics.get(key)
+            if val is not None:
+                metrics_str += f"  {key}={float(val):.3f}"
+
+        # ETA for remaining models in the pipeline
+        eta_pipeline_str = ""
+        if self.total_models > 1 and self.models_done < self.total_models:
+            # Estimate: current model remaining + avg_model_time × remaining_models
+            models_left_after = self.total_models - self.models_done - 1
+            # Use current model's avg_per_epoch × max_epochs as estimate for other models
+            est_per_model = avg_per_epoch * max_epochs
+            eta_pipeline = eta_model + est_per_model * models_left_after
+            eta_pipeline_str = f"  │  Pipeline ETA: ~{self._fmt(eta_pipeline)} ({self.models_done+1}/{self.total_models})"
+
+        print(
+            f"\n  ⏱  [{self.tag}] Epoch {epochs_done}/{max_epochs}"
+            f"  │  This epoch: {self._fmt(epoch_time)}"
+            f"  │  Avg: {self._fmt(avg_per_epoch)}/epoch"
+            f"  │  Model ETA: ~{self._fmt(eta_model)}"
+            f"{eta_pipeline_str}"
+            f"\n     {metrics_str}",
+            flush=True,
+        )
+
+
 def _build_logger(cfg: dict, save_dir: Path) -> pl.pytorch.loggers.Logger:
     name = cfg["logger"].get("name", "tensorboard")
     if name == "tensorboard":
@@ -46,10 +122,13 @@ def _build_logger(cfg: dict, save_dir: Path) -> pl.pytorch.loggers.Logger:
     raise ValueError(f"Unknown logger: {name}")
 
 
-def _build_callbacks(cfg: dict, save_dir: Path) -> list:
+def _build_callbacks(cfg: dict, save_dir: Path, tag: str = "",
+                     total_models: int = 1, models_done: int = 0) -> list:
     callbacks: list = [
         LearningRateMonitor(logging_interval="epoch"),
         DynamicMixingEpochCallback(),         # bumps DM epoch via mp.Value
+        TrainingETACallback(tag=tag, total_models=total_models,
+                            models_done=models_done),
     ]
     ckpt_cfg = cfg.get("checkpoint", {})
     callbacks.append(ModelCheckpoint(
@@ -144,7 +223,11 @@ def main() -> None:
 
     # ---- trainer ------------------------------------------------------
     pl_logger = _build_logger(cfg["training"], save_dir)
-    callbacks = _build_callbacks(cfg["training"], save_dir)
+    callbacks = _build_callbacks(
+        cfg["training"], save_dir, tag=tag,
+        total_models=int(cfg.get("_total_models", 1)),
+        models_done=int(cfg.get("_models_done", 0)),
+    )
     tr = cfg["training"]["trainer"]
     trainer_kwargs = dict(
         max_epochs=int(tr["max_epochs"]),
