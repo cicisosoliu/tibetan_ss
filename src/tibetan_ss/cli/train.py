@@ -256,7 +256,13 @@ def main() -> None:
         trainer_kwargs["gradient_clip_val"] = float(tr.get("gradient_clip_val", 0.0))
     trainer = pl.Trainer(**trainer_kwargs)
     trainer.fit(pl_module, datamodule=datamodule)
-    trainer.test(pl_module, datamodule=datamodule, ckpt_path="best")
+    # Try "best" checkpoint; fall back to "last" if val never ran
+    # (e.g. dry-run with check_val_every_n_epoch > max_epochs).
+    try:
+        trainer.test(pl_module, datamodule=datamodule, ckpt_path="best")
+    except ValueError:
+        logger.info("[train] no 'best' checkpoint found — falling back to 'last'")
+        trainer.test(pl_module, datamodule=datamodule, ckpt_path="last")
 
 
 # ---------------------------------------------------------------------------
