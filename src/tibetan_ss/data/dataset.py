@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,10 @@ class TibetanMixDataset(Dataset):
         self.seed = seed
         self._rng = np.random.default_rng(seed)
         self.fixed_length_samples = int(fixed_length_samples) if fixed_length_samples else None
+        # Shared across all DataLoader worker processes via multiprocessing.Value
+        # so that set_epoch() from the main process is visible inside workers
+        # (even with persistent_workers=True).
+        self._epoch_shared = mp.Value("i", 0)
 
         # Audio cache: filepath → float32 numpy array (at target sample rate)
         self._audio_cache: dict[str, np.ndarray] = {}
@@ -167,8 +172,18 @@ class TibetanMixDataset(Dataset):
         }
 
     # ------------------------------------------------------------------
+    def set_epoch(self, epoch: int) -> None:
+        """Called by the DataModule at the start of each epoch.
+
+        Writes to a ``multiprocessing.Value`` so the update is visible in all
+        DataLoader worker processes (even with ``persistent_workers=True``).
+        """
+        self._epoch_shared.value = epoch
+
     def _sample_online(self, idx: int) -> dict[str, Any]:
-        rng = np.random.default_rng(self.seed * 1_000_003 + idx)
+        # Read epoch from the shared counter — visible across all workers.
+        epoch = self._epoch_shared.value
+        rng = np.random.default_rng(self.seed * 1_000_003 + idx + epoch * 1_000_000_007)
         sa, sb = pick_speaker_pair(self.speakers, rng, self.mixing_cfg.gender_pairing)
         file_a = rng.choice(sa["files"])
         file_b = rng.choice(sb["files"])

@@ -3,6 +3,11 @@
 Official standalone code: https://github.com/alibabasglab/MossFormer2
 (MossFormer2 is NOT part of SpeechBrain core — it's maintained by Alibaba DAMO.)
 
+**Important**: all upstream configs are designed for 8 kHz. This adapter
+scales ``encoder_kernel_size`` and ``masknet_chunksize`` proportionally
+when ``sample_rate`` differs from 8 kHz, preserving the same temporal
+resolution (2 ms window / 0.5 ms hop for the encoder).
+
 Clone the repo into ``third_party/``:
 
 .. code-block:: bash
@@ -29,8 +34,7 @@ from .base import BaseSeparator
 from .registry import register
 
 
-# Default config — matches ``mossformer2_librimix_2spk`` from upstream but
-# lets us override num_spks and sample_rate via our YAML.
+# Exact copy of upstream ``mossformer2_librimix_2spk`` — no manual overrides.
 _DEFAULT_CONFIG = {
     "model_type": "mossformer2",
     "config_name": "mossformer2-tibetan-2spk",
@@ -61,7 +65,7 @@ class MossFormer2Adapter(BaseSeparator):
     """
 
     def __init__(self, sample_rate: int = 16000, num_speakers: int = 2,
-                 variant: str = "L", **kwargs: Any):
+                 **kwargs: Any):
         super().__init__(num_speakers=num_speakers, sample_rate=sample_rate)
         repo_path = register_thirdparty("MossFormer2")
         import sys
@@ -74,14 +78,21 @@ class MossFormer2Adapter(BaseSeparator):
         cfg = dict(_DEFAULT_CONFIG)
         cfg["masknet_numspks"] = num_speakers
         cfg["sample_rate"] = sample_rate
-        if sample_rate >= 16000:
-            cfg["encoder_kernel_size"] = 32
-            cfg["masknet_chunksize"] = 400
+
+        # _DEFAULT_CONFIG is designed for 8 kHz. When sample_rate differs,
+        # scale encoder kernel and chunk size proportionally so the model
+        # operates at the same temporal resolution.
+        _base_sr = 8000
+        if sample_rate != _base_sr:
+            ratio = sample_rate / _base_sr
+            cfg["encoder_kernel_size"] = int(cfg["encoder_kernel_size"] * ratio)
+            cfg["masknet_chunksize"] = int(cfg["masknet_chunksize"] * ratio)
+
+        # Allow YAML-level overrides for any upstream config key
         for k, v in kwargs.items():
             if k in cfg:
                 cfg[k] = v
         self.model = Mossformer2Wrapper(config=cfg)
-        self.variant = variant
 
     def forward(self, mixture: torch.Tensor) -> torch.Tensor:
         mix = self._prepare_input(mixture)            # (B, T)
@@ -97,6 +108,6 @@ class MossFormer2Adapter(BaseSeparator):
 
 @register("mossformer2")
 def build_mossformer2(sample_rate: int = 16000, num_speakers: int = 2,
-                      variant: str = "L", **kwargs) -> MossFormer2Adapter:
+                      **kwargs) -> MossFormer2Adapter:
     return MossFormer2Adapter(sample_rate=sample_rate, num_speakers=num_speakers,
-                              variant=variant, **kwargs)
+                              **kwargs)

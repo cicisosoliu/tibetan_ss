@@ -1,0 +1,24 @@
+# [DEPRECATED] All models now train at 16 kHz (adapters auto-scale encoder params).
+# This preset is kept for backward compatibility but is no longer used by any
+# experiment config. See docs/full_training.md for details.
+#
+# NICT-Tib1 at 8 kHz — for models that only support 8 kHz (SepReformer, MossFormer2).
+# Resampling from 16 kHz → 8 kHz is handled automatically by read_audio().
+# Val/test mixtures must be regenerated at 8 kHz if switching from 16 kHz.
+
+defaults:
+  - nict_tib1_full
+
+sample_rate: 8000
+
+# Adjust segment lengths: same duration in seconds, but half the samples.
+# (The segment config is in seconds so no change needed — read_audio resamples.)
+
+# Offline mixtures need their own output subdirectory so 16k and 8k don't clash.
+offline:
+  num_mixtures:
+    train: 0
+    val:   3000
+    test:  3000
+  output_subdir: mixtures_8k
+  manifest_subdir: manifests_8k

@@ -55,6 +55,20 @@ class SepReformerAdapter(BaseSeparator):
 
         cfg = _load_sepreformer_config(variant)["model"]
         cfg["num_spks"] = num_speakers
+
+        # Upstream configs are designed for 8 kHz. When running at 16 kHz,
+        # scale encoder kernel/stride ×2 to maintain the same temporal
+        # resolution (2 ms window, 0.5 ms hop).
+        upstream_sr = _load_sepreformer_config(variant).get("dataset", {}).get("sampling_rate", 8000)
+        if sample_rate != upstream_sr and sample_rate > 0 and upstream_sr > 0:
+            ratio = sample_rate / upstream_sr
+            enc = cfg.get("module_audio_enc", {})
+            enc["kernel_size"] = int(enc.get("kernel_size", 16) * ratio)
+            enc["stride"] = int(enc.get("stride", 4) * ratio)
+            dec = cfg.get("module_audio_dec", {})
+            dec["kernel_size"] = int(dec.get("kernel_size", 16) * ratio)
+            dec["stride"] = int(dec.get("stride", 4) * ratio)
+
         if overrides:
             cfg.update({k: v for k, v in overrides.items() if k in cfg})
         self.model = model_mod.Model(**cfg)

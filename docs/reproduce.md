@@ -59,6 +59,8 @@ train.json   val.json   test.json
 
 音频放在 `${TIBETAN_SS_OUTPUT}/mixtures/{train,val,test}/<mix_id>/...`。
 
+所有 6 个模型（含 SepReformer / MossFormer2）统一使用 16 kHz。无需额外生成 8 kHz 数据。
+
 若 NICT-Tib1 目录命名不匹配默认正则，加 `--speaker-regex` 参数重跑：
 
 ```bash

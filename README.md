@@ -114,8 +114,8 @@ scripts/run_all.sh
    设计哲学、模块职责矩阵、一条训练指令的完整生命周期、核心契约、依赖矩阵
 2. **实验操作手册** → [docs/experiment_guide.md](docs/experiment_guide.md)
    生命周期 / 配置字段全解 / 常见变体 / 调试 / 性能调优 / 消融流程
-3. **新增模型教程** → [docs/add_new_model.md](docs/add_new_model.md)
-   三种集成路径 + 完整模板 + Checklist + 常见坑 + 端到端案例
+3. **论文数据收集指南** → [docs/paper_data_guide.md](docs/paper_data_guide.md)
+   落盘数据一览 / 逐条结果 / 分桶分析 / 显著性检验 / 可视化 / 复杂度报告
 
 参考资料：
 

@@ -15,23 +15,23 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR, SequentialLR
 
 from ..losses.pit import pit_si_sdr_loss, reorder_sources
 from .metrics import evaluate_batch
+from .test_collector import TestCollectorMixin
 
 
-class SeparationModule(pl.LightningModule):
-    """Base Lightning module for any 2-speaker separator.
-
-    The wrapped ``model`` must satisfy
-    :class:`tibetan_ss.models.base.BaseSeparator` — i.e. accept a mixture of
-    shape ``(B, T)`` and return ``(B, 2, T)`` estimates.
-    """
+class SeparationModule(pl.LightningModule, TestCollectorMixin):
+    """Base Lightning module for any 2-speaker separator."""
 
     def __init__(self, model: nn.Module, training_cfg: dict, sample_rate: int = 16000,
-                 eval_metrics: tuple[str, ...] = ("si_sdr", "si_sdri", "pesq_wb", "stoi")):
+                 eval_metrics: tuple[str, ...] = ("si_sdr", "si_sdri", "pesq_wb", "stoi"),
+                 test_save_dir: str | None = None,
+                 test_max_audio: int = 50):
         super().__init__()
         self.model = model
         self.training_cfg = training_cfg
         self.sample_rate = sample_rate
         self.eval_metrics = tuple(eval_metrics)
+        self._init_test_collector(save_dir=test_save_dir,
+                                  max_audio_save=test_max_audio)
         self.save_hyperparameters(ignore=["model"])
 
     # ------------------------------------------------------------------
@@ -70,11 +70,16 @@ class SeparationModule(pl.LightningModule):
         for k, v in metrics.items():
             self.log(f"test/{k}", v, on_step=False, on_epoch=True,
                      batch_size=out["mix"].shape[0])
+        # Collect per-utterance results + save audio
+        self._collect_test_step(batch, out["est"], out["ref"], out["mix"],
+                                self.sample_rate, self.eval_metrics)
+
+    def on_test_epoch_end(self) -> None:
+        self._finalize_test()
 
     # ------------------------------------------------------------------
     def configure_optimizers(self):
         opt_cfg = self.training_cfg["optimizer"]
-        # Hydra-style _target_ instantiation kept simple to avoid extra deps
         lr = float(opt_cfg["lr"])
         betas = tuple(opt_cfg.get("betas", (0.9, 0.999)))
         wd = float(opt_cfg.get("weight_decay", 0.0))

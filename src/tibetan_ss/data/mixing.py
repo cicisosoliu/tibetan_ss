@@ -159,10 +159,14 @@ class MixtureSimulator:
 
         # --- length handling ------------------------------------------------
         if L <= 0:
-            # natural length -> use the shorter of the two (min mode, aligned at 0)
-            T = int(min(source_a.shape[-1], source_b.shape[-1]))
-            sa = source_a[..., :T].astype(np.float32, copy=False)
-            sb = source_b[..., :T].astype(np.float32, copy=False)
+            # Natural / full length — keep both speakers' complete signals.
+            # Use max(len_a, len_b) and zero-pad the shorter one, so no
+            # content from either speaker is lost. (PPT: "test 不裁剪".)
+            T = int(max(source_a.shape[-1], source_b.shape[-1]))
+            sa = np.zeros(T, dtype=np.float32)
+            sb = np.zeros(T, dtype=np.float32)
+            sa[:source_a.shape[-1]] = source_a.astype(np.float32, copy=False)
+            sb[:source_b.shape[-1]] = source_b.astype(np.float32, copy=False)
         else:
             T = L
             sa = _pad_or_crop(source_a.astype(np.float32, copy=False), T, rng)
@@ -185,22 +189,43 @@ class MixtureSimulator:
             level_db_a, level_db_b = -K / 2, +K / 2
 
         # --- overlap placement ---------------------------------------------
+        # True three-segment layout: [A-only | overlap(A+B) | B-only].
+        #   len_a + len_b = T + overlap_len
+        # so each speaker's active length = (T + overlap_len) / 2.
+        # A randomly chosen speaker is placed left.
         overlap = sample_overlap(self.cfg.overlap, rng)
         overlap = float(np.clip(overlap, 0.0, 1.0))
         overlap_len = int(round(T * overlap))
-        non_overlap = T - overlap_len                      # total non-overlapping segment
-        #    Use layout [A-only | overlap(A+B) | B-only] with random left/right order
+
+        # Each speaker occupies (T + overlap_len) / 2 samples.
+        # Clamp to [overlap_len, T] so neither speaker goes out of bounds.
+        len_a = min(T, max(overlap_len, (T + overlap_len + 1) // 2))
+        len_b = T + overlap_len - len_a                    # ensures len_a + len_b - T == overlap_len
+        len_b = min(T, max(overlap_len, len_b))
+
+        # Randomly decide who goes left.
         if rng.integers(0, 2) == 0:
-            a_start, a_end = 0, overlap_len + non_overlap
-            b_start, b_end = non_overlap, T
+            a_start = 0
+            b_start = T - len_b
         else:
-            b_start, b_end = 0, overlap_len + non_overlap
-            a_start, a_end = non_overlap, T
+            b_start = 0
+            a_start = T - len_a
 
         src1 = np.zeros(T, dtype=np.float32)
         src2 = np.zeros(T, dtype=np.float32)
-        src1[a_start:a_end] = sa[: a_end - a_start]
-        src2[b_start:b_end] = sb[: b_end - b_start]
+        src1[a_start:a_start + len_a] = sa[:len_a]
+        src2[b_start:b_start + len_b] = sb[:len_b]
+
+        # Compute effective (non-silent) overlap: count frames where BOTH
+        # speakers have non-zero amplitude.  This may differ from the
+        # structural `overlap_ratio` when full_length=True pads the shorter
+        # speaker with zeros.
+        _thr = 1e-10
+        active_1 = np.abs(src1) > _thr
+        active_2 = np.abs(src2) > _thr
+        both_active = int(np.count_nonzero(active_1 & active_2))
+        either_active = int(np.count_nonzero(active_1 | active_2))
+        effective_overlap = both_active / max(either_active, 1)
 
         mix = src1 + src2
 
@@ -231,6 +256,7 @@ class MixtureSimulator:
 
         meta = dict(
             overlap_ratio=float(overlap),
+            effective_overlap_ratio=float(effective_overlap),
             level_diff_db=float(K),
             level_db_a=float(level_db_a),
             level_db_b=float(level_db_b),

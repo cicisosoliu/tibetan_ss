@@ -1,4 +1,6 @@
-# SepReformer on NICT-Tib1 + DEMAND, formal training.
+# SepReformer on NICT-Tib1 + DEMAND, formal training @ 16 kHz.
+# Upstream configs are 8 kHz; we scale encoder params ×2 to match 16 kHz
+# (kernel_size 16→32, stride 4→8), keeping the same temporal resolution.
 defaults:
   - /data:     nict_tib1_full
   - /model:    sepreformer
@@ -8,8 +10,7 @@ defaults:
 tag: baseline_sepreformer_nict
 engine: standard
 seed: 20260415
-compile: false    # SepReformer has dynamic shapes (multi-stage downconv +
-                  # relative positional encoding) — compile recompiles repeatedly
+compile: false    # SepReformer has dynamic shapes — compile recompiles repeatedly
 
 training:
   trainer:
@@ -17,7 +18,7 @@ training:
     precision: bf16-mixed
     check_val_every_n_epoch: 5
   dataloader:
-    batch_size: 8        # SepReformer is memory-heavy at 16 kHz
+    batch_size: 8
     num_workers: 4
   logger:
     name: tensorboard

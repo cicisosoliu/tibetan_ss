@@ -20,6 +20,23 @@ from ..utils import get_logger, set_seed
 from ..utils.config import resolve_defaults as _resolve_defaults_shared
 
 
+class DynamicMixingEpochCallback(pl.Callback):
+    """Bump the train dataset's epoch counter at the start of each epoch.
+
+    ``LightningDataModule`` does NOT have ``on_train_epoch_start``, so this
+    must live in a ``Callback`` (which Lightning *does* call). The dataset
+    stores its epoch in a ``multiprocessing.Value`` so all DataLoader workers
+    (including ``persistent_workers``) see the update.
+    """
+
+    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        dm = trainer.datamodule
+        if dm is not None and hasattr(dm, "_train") and dm._train is not None:
+            ds = dm._train
+            if hasattr(ds, "set_epoch"):
+                ds.set_epoch(trainer.current_epoch)
+
+
 def _build_logger(cfg: dict, save_dir: Path) -> pl.pytorch.loggers.Logger:
     name = cfg["logger"].get("name", "tensorboard")
     if name == "tensorboard":
@@ -30,7 +47,10 @@ def _build_logger(cfg: dict, save_dir: Path) -> pl.pytorch.loggers.Logger:
 
 
 def _build_callbacks(cfg: dict, save_dir: Path) -> list:
-    callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
+    callbacks: list = [
+        LearningRateMonitor(logging_interval="epoch"),
+        DynamicMixingEpochCallback(),         # bumps DM epoch via mp.Value
+    ]
     ckpt_cfg = cfg.get("checkpoint", {})
     callbacks.append(ModelCheckpoint(
         dirpath=str(save_dir / "checkpoints"),
@@ -91,12 +111,16 @@ def main() -> None:
 
     # ---- lightning module --------------------------------------------
     engine_name = str(cfg.get("engine", "standard"))
+    _eval_metrics = tuple(cfg["training"].get("eval_metrics",
+                                               ["si_sdr", "si_sdri", "pesq_wb", "stoi"]))
+    _test_max_audio = int(cfg.get("test_max_audio", 50))
     if engine_name == "standard":
         pl_module = SeparationModule(
             model=model, training_cfg=cfg["training"],
             sample_rate=int(cfg["data"]["sample_rate"]),
-            eval_metrics=tuple(cfg["training"].get("eval_metrics",
-                                                    ["si_sdr", "si_sdri", "pesq_wb", "stoi"])),
+            eval_metrics=_eval_metrics,
+            test_save_dir=str(save_dir),
+            test_max_audio=_test_max_audio,
         )
     elif engine_name == "gan":
         disc_cfg = cfg["model"].get("discriminator", {})
@@ -111,8 +135,9 @@ def main() -> None:
             model=model, training_cfg=training_cfg,
             sample_rate=int(cfg["data"]["sample_rate"]),
             discriminator_cfg=disc_cfg, schedule_cfg=sched_cfg,
-            eval_metrics=tuple(cfg["training"].get("eval_metrics",
-                                                    ["si_sdr", "si_sdri", "pesq_wb", "stoi"])),
+            eval_metrics=_eval_metrics,
+            test_save_dir=str(save_dir),
+            test_max_audio=_test_max_audio,
         )
     else:
         raise ValueError(f"Unknown engine: {engine_name}")
@@ -128,6 +153,7 @@ def main() -> None:
         devices=tr.get("devices", "auto"),
         strategy=tr.get("strategy", "auto"),
         accumulate_grad_batches=int(tr.get("accumulate_grad_batches", 1)),
+        check_val_every_n_epoch=int(tr.get("check_val_every_n_epoch", 1)),
         log_every_n_steps=int(tr.get("log_every_n_steps", 50)),
         deterministic=bool(tr.get("deterministic", False)),
         logger=pl_logger,

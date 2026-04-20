@@ -27,15 +27,18 @@ from ..models.proposed.losses import (
     representation_diff_loss,
 )
 from .metrics import evaluate_batch
+from .test_collector import TestCollectorMixin
 
 
-class ProposedGANModule(pl.LightningModule):
+class ProposedGANModule(pl.LightningModule, TestCollectorMixin):
     """Trainer for :class:`ProposedEarlySeparation` with auxiliary losses."""
 
     def __init__(self, model: nn.Module, training_cfg: dict, sample_rate: int = 16000,
                  discriminator_cfg: dict | None = None,
                  schedule_cfg: dict | None = None,
-                 eval_metrics: tuple[str, ...] = ("si_sdr", "si_sdri", "pesq_wb", "stoi")):
+                 eval_metrics: tuple[str, ...] = ("si_sdr", "si_sdri", "pesq_wb", "stoi"),
+                 test_save_dir: str | None = None,
+                 test_max_audio: int = 50):
         super().__init__()
         self.model = model
         self.discriminator = MultiScaleSTFTDiscriminator(**(discriminator_cfg or {}))
@@ -43,8 +46,10 @@ class ProposedGANModule(pl.LightningModule):
         self.sample_rate = sample_rate
         self.eval_metrics = tuple(eval_metrics)
         self.schedule_cfg = schedule_cfg or {"rep_from_epoch": 10, "gan_from_epoch": 25}
-        # The proposed trainer does its own optimiser juggling.
         self.automatic_optimization = False
+        self._init_test_collector(save_dir=test_save_dir,
+                                  max_audio_save=test_max_audio,
+                                  save_features=True)   # save z_a/z_b for t-SNE
         self.save_hyperparameters(ignore=["model"])
 
     # ------------------------------------------------------------------
@@ -137,6 +142,17 @@ class ProposedGANModule(pl.LightningModule):
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
         self._eval_step(batch, "test")
+        # Collect per-utterance + save audio + save features (z_a, z_b)
+        mix = batch["mixture"]; ref = batch["sources"]
+        with torch.no_grad():
+            est, aux = self.model(mix, return_aux=True) if hasattr(self.model, "forward") and "return_aux" in self.model.forward.__code__.co_varnames else (self.model(mix), None)
+            _, perm = pit_si_sdr_loss(est, ref, return_perm=True)
+            est_aligned = reorder_sources(est, perm)
+        self._collect_test_step(batch, est_aligned, ref, mix,
+                                self.sample_rate, self.eval_metrics, aux=aux)
+
+    def on_test_epoch_end(self) -> None:
+        self._finalize_test()
 
     # ------------------------------------------------------------------
     def configure_optimizers(self):

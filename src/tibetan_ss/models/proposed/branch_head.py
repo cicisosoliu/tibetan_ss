@@ -1,4 +1,10 @@
-"""Dual-branch TCN heads — the *actual* early-stage separator."""
+"""Dual-branch TCN heads — reinforce the per-speaker representations that
+the shared encoder has already begun to separate.
+
+Perturbation / symmetry-breaking is now handled at the *input waveform* level
+inside ``ProposedEarlySeparation.forward`` (before the encoder), matching
+``提出模型.docx §3.1``.  These branch heads are simple independent TCN stacks.
+"""
 
 from __future__ import annotations
 
@@ -19,31 +25,3 @@ class BranchHead(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         return self.tcn(features)
-
-
-class DualBranchHeads(nn.Module):
-    """Two independent branch heads operating on a shared encoded feature."""
-
-    def __init__(self, bottleneck: int = 128, hidden: int = 512,
-                 tcn_blocks: int = 8, tcn_repeats: int = 4,
-                 perturbation_std: float = 1e-3):
-        super().__init__()
-        self.branch_a = BranchHead(bottleneck, hidden, tcn_blocks, tcn_repeats)
-        self.branch_b = BranchHead(bottleneck, hidden, tcn_blocks, tcn_repeats)
-        self.perturbation_std = float(perturbation_std)
-
-    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Inject a tiny per-branch perturbation (only at training) to break
-        symmetry, then run each branch independently.
-        """
-        if self.training and self.perturbation_std > 0:
-            eps_a = torch.randn_like(features) * self.perturbation_std
-            eps_b = torch.randn_like(features) * self.perturbation_std
-            x_a = features + eps_a
-            x_b = features + eps_b
-        else:
-            x_a = features
-            x_b = features
-        z_a = self.branch_a(x_a)
-        z_b = self.branch_b(x_b)
-        return z_a, z_b

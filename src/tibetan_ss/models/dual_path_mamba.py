@@ -2,18 +2,10 @@
 
 Upstream: https://github.com/xi-j/Mamba-TasNet
 
-**Why we don't use the upstream's vendored BiMamba/selective_scan:**
-
-Mamba-TasNet ships its own ``modules/mamba/bimamba.py`` and
-``selective_scan_interface.py``, which call ``causal_conv1d_cuda`` with a
-5-argument signature from causal-conv1d ~1.1. Modern causal-conv1d (>=1.4)
-changed the C++ binding to 8 arguments, causing a hard ``TypeError`` at
-forward time. Pinning an older causal-conv1d breaks mamba-ssm >=2.
-
-The solution here is to **bypass the vendored code entirely**: we build a
-lightweight ``NativeBiMamba`` on top of ``mamba_ssm.Mamba`` (which the user
-already verified works) and wrap it in a SpeechBrain ``Dual_Path_Model`` for
-the dual-path framework.
+Uses the **upstream's original BiMamba / MambaBlocksSequential** via a
+causal-conv1d compatibility shim (see ``_causal_conv1d_compat.py``). This
+preserves the exact architecture from the paper while supporting modern
+causal-conv1d >= 1.4.
 
 .. code-block:: bash
 
@@ -27,86 +19,10 @@ from typing import Any
 import torch
 import torch.nn as nn
 
+from ._thirdparty_path import register_thirdparty
 from .base import BaseSeparator
 from .registry import register
 
-
-# ---------------------------------------------------------------------------
-# Native bidirectional Mamba — uses only `mamba_ssm.Mamba` (no vendored code)
-# ---------------------------------------------------------------------------
-
-class NativeBiMamba(nn.Module):
-    """Bidirectional Mamba built from two standard ``mamba_ssm.Mamba`` passes.
-
-    Forward pass: run Mamba on ``x`` and on ``flip(x)``, concatenate along the
-    feature dimension, then project back to ``d_model``.
-    """
-
-    def __init__(self, d_model: int, d_state: int = 16, d_conv: int = 4,
-                 expand: int = 2, **kwargs):
-        super().__init__()
-        from mamba_ssm import Mamba
-        self.mamba_fwd = Mamba(d_model=d_model, d_state=d_state, d_conv=d_conv,
-                               expand=expand)
-        self.mamba_bwd = Mamba(d_model=d_model, d_state=d_state, d_conv=d_conv,
-                               expand=expand)
-        self.out_proj = nn.Linear(d_model * 2, d_model)
-
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        # x: (B, L, D)
-        fwd = self.mamba_fwd(x)
-        bwd = self.mamba_bwd(x.flip(dims=[1])).flip(dims=[1])
-        return self.out_proj(torch.cat([fwd, bwd], dim=-1))
-
-
-class NativeMambaBlock(nn.Module):
-    """Pre-norm + Mamba (or BiMamba) + residual."""
-
-    def __init__(self, d_model: int, bidirectional: bool = True,
-                 d_state: int = 16, d_conv: int = 4, expand: int = 2, **kwargs):
-        super().__init__()
-        self.norm = nn.LayerNorm(d_model)
-        if bidirectional:
-            self.mixer = NativeBiMamba(d_model, d_state=d_state, d_conv=d_conv,
-                                       expand=expand)
-        else:
-            from mamba_ssm import Mamba
-            self.mixer = Mamba(d_model=d_model, d_state=d_state, d_conv=d_conv,
-                               expand=expand)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x + self.mixer(self.norm(x))
-
-
-class NativeMambaStack(nn.Module):
-    """A stack of ``n_mamba`` Mamba blocks — drop-in replacement for the
-    upstream ``MambaBlocksSequential`` but using only ``mamba_ssm.Mamba``.
-
-    SpeechBrain's ``Dual_Path_Model`` calls ``intra_model(x)`` and
-    ``inter_model(x)`` where ``x`` has shape ``(B, L, D)``. The output must
-    have the same shape.
-    """
-
-    def __init__(self, n_mamba: int = 1, bidirectional: bool = True,
-                 d_model: int = 256, d_state: int = 16, expand: int = 2,
-                 d_conv: int = 4, **kwargs):
-        super().__init__()
-        self.layers = nn.ModuleList([
-            NativeMambaBlock(d_model, bidirectional=bidirectional,
-                             d_state=d_state, d_conv=d_conv, expand=expand)
-            for _ in range(n_mamba)
-        ])
-        self.norm = nn.LayerNorm(d_model)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for layer in self.layers:
-            x = layer(x)
-        return self.norm(x)
-
-
-# ---------------------------------------------------------------------------
-# Build the full Encoder + Dual_Path_Model + Decoder from SpeechBrain
-# ---------------------------------------------------------------------------
 
 def _build_native(
     num_speakers: int,
@@ -122,28 +38,65 @@ def _build_native(
     bidirectional: bool,
     skip_around_intra: bool,
 ) -> nn.Module:
+    register_thirdparty("Mamba-TasNet")
+
+    # ---- Compat shim: translate causal-conv1d >=1.4 (8-arg) API to the
+    # 5-arg signature that the vendored selective_scan_interface.py expects. ---
+    from ._causal_conv1d_compat import install_compat_shim
+    install_compat_shim()
+
+    # ---- Fix: mamba-ssm >= 2.0 moved RMSNorm ---
+    import modules.mamba_blocks as _mb
+    if _mb.RMSNorm is None:
+        try:
+            from mamba_ssm.ops.triton.layer_norm import RMSNorm
+            _mb.RMSNorm = RMSNorm
+        except ImportError:
+            class _RMSNorm(nn.Module):
+                def __init__(self, hidden_size, eps=1e-6, **kwargs):
+                    super().__init__()
+                    self.weight = nn.Parameter(torch.ones(hidden_size))
+                    self.eps = eps
+                def forward(self, x):
+                    x_f = x.float()
+                    return (self.weight * x_f * torch.rsqrt(
+                        x_f.pow(2).mean(-1, keepdim=True) + self.eps
+                    )).to(x.dtype)
+            _mb.RMSNorm = _RMSNorm
+
     from speechbrain.lobes.models.dual_path import (
         Dual_Path_Model,
         Decoder,
         Encoder,
     )
+    from modules.mamba_blocks import MambaBlocksSequential
 
     encoder = Encoder(kernel_size=kernel_size, out_channels=n_encoder_out)
-    intra = NativeMambaStack(
-        n_mamba=max(1, n_mamba_dp // 2),
+    intra = MambaBlocksSequential(
+        n_mamba=n_mamba_dp // 2,
         bidirectional=bidirectional,
         d_model=n_encoder_out,
         d_state=d_state,
         expand=mamba_expand,
         d_conv=mamba_conv,
+        fused_add_norm=False,
+        rms_norm=True,
+        residual_in_fp32=False,
+        conv_bias=True,
+        bias=False,
     )
-    inter = NativeMambaStack(
-        n_mamba=max(1, n_mamba_dp // 2),
+    inter = MambaBlocksSequential(
+        n_mamba=n_mamba_dp // 2,
         bidirectional=bidirectional,
         d_model=n_encoder_out,
         d_state=d_state,
         expand=mamba_expand,
         d_conv=mamba_conv,
+        fused_add_norm=False,
+        rms_norm=True,
+        residual_in_fp32=False,
+        conv_bias=True,
+        bias=False,
     )
     masknet = Dual_Path_Model(
         num_spks=num_speakers,
@@ -167,12 +120,8 @@ def _build_native(
     return nn.ModuleDict({"encoder": encoder, "masknet": masknet, "decoder": decoder})
 
 
-# ---------------------------------------------------------------------------
-# Adapter
-# ---------------------------------------------------------------------------
-
 class DualPathMambaAdapter(BaseSeparator):
-    """Wraps SpeechBrain Encoder + dual-path native-Mamba masknet + Decoder."""
+    """Wraps upstream Mamba-TasNet's encoder + dual-path BiMamba masknet + decoder."""
 
     def __init__(self,
                  sample_rate: int = 8000,

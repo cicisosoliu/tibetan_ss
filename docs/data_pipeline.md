@@ -94,6 +94,7 @@ reverb:
 
 - `sample_rate` 在 config 中统一控制（16 kHz 默认 / 8 kHz 可选），`read_audio` 用 `librosa.resample` 做到目标 SR
 - 所有源音频、噪声统一降为单通道（均值通道）
+- **统一 16 kHz**：所有 6 个模型（含 SepReformer / MossFormer2）统一使用 16 kHz 数据。SepReformer / MossFormer2 的上游 config 原本是 8 kHz，adapter 会自动按采样率等比缩放 encoder 参数（kernel_size ×2, stride ×2, chunksize ×2），保持同等时间分辨率。这样只需要一套数据管道和一张统一的 PESQ-WB 指标表。
 
 ## 6. 质量检查
 

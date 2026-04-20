@@ -1,2 +1,4 @@
 name: mossformer2
-variant: L            # "S" or "L"
+# Matches upstream mossformer2_librimix_2spk exactly (8 kHz, 24 intra layers).
+# All hyperparams live in the adapter's _DEFAULT_CONFIG; override here if needed.
+# Example: intra_numlayers: 12  (for a lighter version)

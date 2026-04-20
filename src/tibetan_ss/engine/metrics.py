@@ -45,10 +45,18 @@ def pesq_batch(est: torch.Tensor, ref: torch.Tensor, sample_rate: int,
         raise RuntimeError("install `pesq` to enable PESQ metric") from e
 
     if mode == "wb" and sample_rate != 16000:
-        # PESQ-wb requires 16k
-        mode = "nb"
-    if mode == "nb" and sample_rate != 8000 and sample_rate != 16000:
-        # we only support 8k / 16k PESQ
+        # PESQ-wb requires 16k. Instead of silently falling back to NB
+        # (which would produce values under a "pesq_wb" key that are actually
+        # NB scores), return NaN. Callers should use pesq_nb explicitly for
+        # 8 kHz models.
+        import warnings
+        warnings.warn(
+            f"pesq_wb requested but sample_rate={sample_rate} (requires 16000). "
+            "Returning NaN. Use eval_metrics=[..., pesq_nb, ...] for 8 kHz models.",
+            stacklevel=2,
+        )
+        return torch.full(est.shape[:2], float("nan"))
+    if mode == "nb" and sample_rate not in (8000, 16000):
         return torch.full(est.shape[:2], float("nan"))
 
     # .float() handles bf16 / fp16 → numpy (which doesn't support those dtypes)

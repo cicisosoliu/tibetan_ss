@@ -1,12 +1,13 @@
 name: tiger
-# Defaults follow the upstream ``configs/speech-32k.yaml`` scaled to 16 kHz.
+# Aligned with upstream third_party/TIGER/configs/tiger-large.yml (16 kHz).
+# tiger-small uses num_blocks=4; tiger-large uses num_blocks=8.
 out_channels: 128
-in_channels: 128
-num_blocks: 16
-upsampling_depth: 4
+in_channels: 256
+num_blocks: 8
+upsampling_depth: 5
 att_n_head: 4
 att_hid_chan: 4
 att_kernel_size: 8
 att_stride: 1
-win: 1024                 # STFT window (samples) at 16 kHz
-stride: 256
+win: 640                  # upstream: 640 @ 16 kHz (40 ms window)
+stride: 160               # upstream: 160 @ 16 kHz (10 ms hop)

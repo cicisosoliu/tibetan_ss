@@ -79,6 +79,14 @@ est = model(mixture)      # mixture: (B, T)   → est: (B, 2, T)
   2. 加载预训练 frontend 权重后，设 `freeze_frontend=true`，跑监督分离
   3. 或直接端到端训练（`freeze_frontend=false`）
 
+> **当前限制**：SSL 预训练脚本尚未实现。`ext_dip_nict.yaml` 直接走端到端
+> 监督训练（`freeze_frontend=false`），**不含论文中的 self-supervised
+> domain-invariant pretraining 环节**。因此当前 DIP Frontend 的实验结果
+> 不能等同于论文报告的 "pretrained frontend" 效果，只是一个 idea-level
+> 复现（相当于一个带 speaker_split 层的 Conv-TasNet 变体）。如需严格对标
+> 论文，需要补实现 BYOL SSL 预训练 loop 并在预训练后 freeze frontend 再
+> 做监督训练。代码中已预留了 `update_target()` / `target_frontend()` 接口。
+
 ---
 
 ## Proposed: Early-Separation

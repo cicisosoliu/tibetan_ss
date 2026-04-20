@@ -18,23 +18,22 @@ def representation_diff_loss(
 ) -> torch.Tensor:
     """Encourage the two branch representations to diverge.
 
-    * Cosine similarity term – shrinks the channel-wise cosine similarity
+    * **Cosine similarity term** – shrinks the channel-wise cosine similarity
       between ``z_a`` and ``z_b``.
-    * Orthogonality term – shrinks ``|Z_a^T Z_b|_F`` after per-channel
-      L2-normalisation, pushing the two subspaces apart.
+    * **Orthogonality term** – minimises ``||Z_a^T Z_b||_F^2`` (the full
+      cross-Gram matrix, including diagonal) after per-channel L2 normalisation,
+      pushing the two subspaces toward zero correlation everywhere.
     """
     # Flatten time, keep batch & channel dims
     Za = z_a.flatten(2)                                 # (B, C, L)
     Zb = z_b.flatten(2)
     # Cosine similarity along time per channel, averaged
     cos = F.cosine_similarity(Za, Zb, dim=-1).abs().mean()
-    # Orthogonality: normalised Gram cross term
+    # Orthogonality: ||Z_a^T Z_b||_F^2 → 0 (all entries, including diagonal)
     za_n = F.normalize(Za, dim=-1)
     zb_n = F.normalize(Zb, dim=-1)
     cross = torch.matmul(za_n, zb_n.transpose(-1, -2))  # (B, C, C)
-    # Subtract identity so the diagonal doesn't penalise same-channel corr
-    eye = torch.eye(cross.shape[-1], device=cross.device, dtype=cross.dtype).expand_as(cross)
-    ortho = (cross - eye).pow(2).mean()
+    ortho = cross.pow(2).mean()
     return cosine_weight * cos + orthogonal_weight * ortho
 
 

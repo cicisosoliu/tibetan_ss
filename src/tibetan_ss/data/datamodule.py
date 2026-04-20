@@ -110,6 +110,10 @@ class TibetanMixDataModule(pl.LightningDataModule):
             full_length=full_length,
         )
 
+    # NOTE: LightningDataModule does NOT have on_train_epoch_start().
+    # Epoch bumping for Dynamic Mixing is handled by DynamicMixingEpochCallback
+    # (registered in cli/train.py), which IS called by Lightning's Callback API.
+
     # ------------------------------------------------------------------
     def train_dataloader(self) -> DataLoader:
         return DataLoader(

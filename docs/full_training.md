@@ -110,6 +110,11 @@ export TIBETAN_SS_OUTPUT="$PWD/data"      # 生成数据落盘位置
 scripts/prepare_data.sh configs/data/nict_tib1_full.yaml
 ```
 
+> **所有 6 个模型统一使用 16 kHz。** SepReformer / MossFormer2 的上游 config
+> 原本是 8 kHz，但 adapter 会自动按采样率等比缩放 encoder 参数
+> （kernel_size ×2, stride ×2, chunksize ×2），保持相同的时间分辨率。
+> 这样只需要一套数据、一张 PESQ-WB 比较表。
+
 这条命令等价于：
 
 ```bash
@@ -245,13 +250,16 @@ scripts/train.sh configs/experiment/proposed_formal.yaml \
 
 仓库里准备了 5 个以 `_nict` 结尾的对标 experiment：
 
-| 实验 config | 模型 | 额外依赖 |
-|------------|------|---------|
-| `configs/experiment/baseline_tiger_nict.yaml` | TIGER | `rotary_embedding_torch` `asteroid-filterbanks` |
-| `configs/experiment/baseline_sepreformer_nict.yaml` | SepReformer | — |
-| `configs/experiment/baseline_dual_path_mamba_nict.yaml` | Dual-path Mamba | CUDA + `mamba-ssm` `causal-conv1d` `speechbrain` |
-| `configs/experiment/baseline_mossformer2_nict.yaml` | MossFormer2 | `speechbrain` |
-| `configs/experiment/ext_dip_nict.yaml` | DIP Frontend | — |
+| 实验 config | 模型 | 数据预设 | 额外依赖 |
+|------------|------|---------|---------|
+| `baseline_tiger_nict.yaml` | TIGER | `nict_tib1_full` | `rotary_embedding_torch` `asteroid-filterbanks` |
+| `baseline_sepreformer_nict.yaml` | SepReformer | `nict_tib1_full` | — |
+| `baseline_dual_path_mamba_nict.yaml` | Dual-path Mamba | `nict_tib1_full` | CUDA + `mamba-ssm` `causal-conv1d` `speechbrain` |
+| `baseline_mossformer2_nict.yaml` | MossFormer2 | `nict_tib1_full` | `rotary_embedding_torch` `huggingface_hub` + clone MossFormer2 |
+| `ext_dip_nict.yaml` | DIP Frontend | `nict_tib1_full` | — |
+
+> **所有模型统一 16 kHz。** SepReformer / MossFormer2 的上游 config 原本是 8 kHz，
+> adapter 会自动等比缩放 encoder 参数以适配 16 kHz。一套数据、一张 PESQ-WB 比较表。
 
 跑单个：
 
@@ -373,7 +381,7 @@ scripts/train.sh configs/experiment/proposed_formal.yaml \
 | 文件 | 作用 |
 |------|------|
 | `scripts/download_demand.sh` | DEMAND 一键下载 |
-| `configs/data/nict_tib1_full.yaml` | 正式训练数据预设（噪声开、3k val/test、DM） |
+| `configs/data/nict_tib1_full.yaml` | 正式训练数据预设 16 kHz（噪声开、3k val/test、DM） |
 | `configs/experiment/proposed_formal.yaml` | 提出模型正式 200 epoch |
 | `configs/experiment/baseline_tiger_nict.yaml` 等 5 个 | 5 个对标模型的 NICT-Tib1 formal 配置 |
 | `docs/full_training.md` | 本文 |
@@ -382,17 +390,18 @@ scripts/train.sh configs/experiment/proposed_formal.yaml \
 
 | 场景 | 提出模型 | baselines |
 |------|---------|-----------|
-| 冒烟（CPU 可跑） | `smoke_proposed.yaml` | 自己写 `smoke_<name>.yaml` 或 CLI 覆盖 |
-| 正式（NICT-Tib1 + DEMAND） | `proposed_formal.yaml` | `baseline_<name>_nict.yaml` |
-| 公共数据集（WSJ0 / LibriMix 等原论文设定） | `proposed.yaml` | `baseline_<name>.yaml` |
+| 冒烟 | `smoke_proposed.yaml` | CLI 覆盖 |
+| 正式 | `proposed_formal.yaml` | `baseline_{tiger,sepreformer,dual_path_mamba,mossformer2}_nict.yaml` + `ext_dip_nict.yaml` |
+
+> 所有 6 个实验统一使用 `nict_tib1_full`（16 kHz），一套数据、一张指标表。
 
 ### Data config 对照
 
-| 预设 | 噪声 | val/test 数 | DM | 适用 |
-|------|------|-----------|-----|------|
-| `nict_tib1.yaml` | off | 200 | on | 冒烟 / 脱机调试 |
-| `nict_tib1_full.yaml` | on | 3000 | on | 正式训练（本文） |
-| `sr16k.yaml` / `sr8k.yaml` | 取决于 default | 取决于 default | off | 公共数据集的纯采样率切换 |
+| 预设 | 采样率 | 噪声 | val/test 数 | DM | 适用 |
+|------|--------|------|-----------|-----|------|
+| `nict_tib1.yaml` | 16k | off | 200 | on | 冒烟 |
+| `nict_tib1_full.yaml` | 16k | on | 3000 | on | **所有 6 个正式实验** |
+| `sr16k.yaml` / `sr8k.yaml` | 16k/8k | default | default | off | 公共数据集 |
 
 ---
 
@@ -409,7 +418,7 @@ scripts/train.sh configs/experiment/proposed_formal.yaml \
 
 不是。同一场景的 16 个通道来自一个 16-mic 阵列，空间位置不同，录到的背景声稍有差异。对我们的单通道训练来说，相当于把每个场景的噪声量扩大 16 倍，是 free 的数据增强。
 
-### 9.3 我想在训练时看某条验证样本的音频
+### 9.4 我想在训练时看某条验证样本的音频
 
 在 TensorBoard 里 Lightning 默认没把 audio 写进去。要加的话在 `ProposedGANModule.validation_step` 结尾调用 `self.logger.experiment.add_audio(...)`。但跑正式实验前改这段不是必要的，导出 best ckpt 之后用 `scripts/evaluate.sh` + 自己写个播放脚本更干净。
 

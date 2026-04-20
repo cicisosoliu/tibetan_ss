@@ -1,5 +1,8 @@
 """Walk each experiment's output dir and build a Markdown comparison table.
 
+All models are trained and evaluated at 16 kHz, so PESQ-WB is the single
+perceptual quality metric across the board.
+
 Writes ``outputs/summary.md``:
 
 | model | SI-SDR | SI-SDRi | PESQ-WB | STOI |
@@ -11,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 from pathlib import Path
 
 
@@ -21,7 +23,6 @@ METRICS = ("si_sdr", "si_sdri", "pesq_wb", "stoi")
 def _load_latest_csv(run_dir: Path) -> dict[str, float] | None:
     csv_root = run_dir / "csv"
     if not csv_root.exists():
-        # fall back to tensorboard dir – we don't parse that here
         return None
     versions = sorted(csv_root.glob("version_*"))
     if not versions:
@@ -40,6 +41,12 @@ def _load_latest_csv(run_dir: Path) -> dict[str, float] | None:
     return best or None
 
 
+def _fmt(val: float | None) -> str:
+    if val is None or val != val:
+        return "—"
+    return f"{val:.3f}"
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--root", default="outputs/logs", help="logger save root")
@@ -54,14 +61,17 @@ def main() -> None:
         metrics = _load_latest_csv(run_dir) or {}
         rows.append((run_dir.name, metrics))
 
-    lines = ["| model | SI-SDR | SI-SDRi | PESQ-WB | STOI |",
-             "| ----- | ------ | ------- | ------- | ---- |"]
+    lines = [
+        "| model | SI-SDR | SI-SDRi | PESQ-WB | STOI |",
+        "| ----- | ------ | ------- | ------- | ---- |",
+    ]
     for name, m in rows:
         lines.append(
-            f"| {name} | {m.get('si_sdr', float('nan')):.3f} | "
-            f"{m.get('si_sdri', float('nan')):.3f} | "
-            f"{m.get('pesq_wb', float('nan')):.3f} | "
-            f"{m.get('stoi', float('nan')):.3f} |"
+            f"| {name} "
+            f"| {_fmt(m.get('si_sdr'))} "
+            f"| {_fmt(m.get('si_sdri'))} "
+            f"| {_fmt(m.get('pesq_wb'))} "
+            f"| {_fmt(m.get('stoi'))} |"
         )
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
