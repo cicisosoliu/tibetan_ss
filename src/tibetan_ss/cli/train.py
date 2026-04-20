@@ -229,12 +229,11 @@ def main() -> None:
         models_done=int(cfg.get("_models_done", 0)),
     )
     tr = cfg["training"]["trainer"]
-    # Resolve DDP strategy: the GAN engine has unused parameters in early
-    # stages (discriminator idle during Stage 1), so it needs
-    # find_unused_parameters=True. We auto-upgrade "ddp" → "ddp_find_unused"
-    # when engine=gan.
+    # Resolve DDP strategy: several models have parameters not used in every
+    # forward pass (GAN discriminator in Stage 1, TIGER's conditional paths,
+    # etc.), so always enable find_unused_parameters when DDP is requested.
     strategy = tr.get("strategy", "auto")
-    if engine_name == "gan" and str(strategy) == "ddp":
+    if str(strategy) == "ddp":
         strategy = "ddp_find_unused_parameters_true"
 
     trainer_kwargs = dict(
