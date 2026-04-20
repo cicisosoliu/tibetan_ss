@@ -9,6 +9,7 @@ defaults:
 tag: baseline_dual_path_mamba_nict
 engine: standard
 seed: 20260415
+compile: true
 
 # Override the default 8 kHz / kernel_size=16 of the model config to match
 # NICT-Tib1's 16 kHz sampling rate.

@@ -17,6 +17,7 @@ defaults:
 tag: proposed_formal
 engine: gan
 seed: 20260415
+compile: true
 
 training:
   trainer:

@@ -8,6 +8,7 @@ defaults:
 tag: baseline_sepreformer_nict
 engine: standard
 seed: 20260415
+compile: true
 
 training:
   trainer:
