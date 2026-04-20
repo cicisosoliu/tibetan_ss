@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+import torch
 import lightning as pl
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
