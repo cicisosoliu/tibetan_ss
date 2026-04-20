@@ -80,13 +80,16 @@ class _CompatModule(ModuleType):
     @staticmethod
     def _make_bwd_9(real_bwd):
         def causal_conv1d_bwd(x, weight, bias, dout, seq_idx, dx, silu_activation):
-            return real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation)
+            result = real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation)
+            # Old API returns (dx, dweight, dbias); new may return extra grads
+            return result[0], result[1], result[2]
         return causal_conv1d_bwd
 
     @staticmethod
     def _make_bwd_10(real_bwd):
         def causal_conv1d_bwd(x, weight, bias, dout, seq_idx, dx, silu_activation):
-            return real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation, False)
+            result = real_bwd(x, weight, bias, dout, seq_idx, None, None, dx, silu_activation, False)
+            return result[0], result[1], result[2]
         return causal_conv1d_bwd
 
     def __getattr__(self, name):
