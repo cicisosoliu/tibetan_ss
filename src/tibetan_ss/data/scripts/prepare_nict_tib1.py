@@ -25,6 +25,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+import soundfile as sf
+
 try:
     from omegaconf import OmegaConf
 except ImportError:  # pragma: no cover
@@ -35,6 +37,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+# Minimum duration (seconds) for an audio file to be included.
+_MIN_DURATION_SEC = 1.0
+
 
 _DEFAULT_SPEAKER_REGEX = r"^(?P<gender>[MF])(?P<sid>\d+)"
 
@@ -43,9 +48,22 @@ _DEFAULT_SPEAKER_REGEX = r"^(?P<gender>[MF])(?P<sid>\d+)"
 # Speaker discovery
 # ---------------------------------------------------------------------------
 
+def _is_valid_audio(path: Path, min_dur: float = _MIN_DURATION_SEC) -> bool:
+    """Return True if the wav file is readable and at least *min_dur* seconds."""
+    try:
+        info = sf.info(str(path))
+        return info.frames > 0 and info.duration >= min_dur
+    except Exception:
+        return False
+
+
 def _scan_speakers_regex(root: Path, regex: re.Pattern) -> list[dict]:
     speakers: dict[str, dict] = {}
+    skipped = 0
     for wav in sorted(root.rglob("*.wav")):
+        if not _is_valid_audio(wav):
+            skipped += 1
+            continue
         rel_parts = wav.relative_to(root).parts
         sid = None
         gender = None
@@ -61,6 +79,8 @@ def _scan_speakers_regex(root: Path, regex: re.Pattern) -> list[dict]:
         if sid not in speakers:
             speakers[sid] = {"id": sid, "gender": gender.upper(), "files": []}
         speakers[sid]["files"].append(str(wav))
+    if skipped:
+        print(f"[prepare] WARN skipped {skipped} invalid/short audio files (< {_MIN_DURATION_SEC}s)")
     return sorted(speakers.values(), key=lambda s: s["id"])
 
 
@@ -77,9 +97,13 @@ def _scan_speakers_nict_tib1(root: Path, data_subdir: str, gender_map: dict[str,
             f"`paths.tibetan_root` correctly, and does it contain a `{data_subdir}/` subfolder?"
         )
     speakers: dict[str, dict] = {}
+    skipped = 0
     for wav in sorted(speakers_root.rglob("*.wav")):
         rel_parts = wav.relative_to(speakers_root).parts
         if not rel_parts:
+            continue
+        if not _is_valid_audio(wav):
+            skipped += 1
             continue
         sid = rel_parts[0]                              # e.g. "006"
         if sid not in speakers:
@@ -89,6 +113,8 @@ def _scan_speakers_nict_tib1(root: Path, data_subdir: str, gender_map: dict[str,
                 continue
             speakers[sid] = {"id": sid, "gender": gender, "files": []}
         speakers[sid]["files"].append(str(wav))
+    if skipped:
+        print(f"[prepare] WARN skipped {skipped} invalid/short audio files (< {_MIN_DURATION_SEC}s)")
     missing = set(gender_map) - set(speakers)
     if missing:
         print(f"[prepare] WARN gender_map has {len(missing)} speakers not found on disk: {sorted(missing)}")

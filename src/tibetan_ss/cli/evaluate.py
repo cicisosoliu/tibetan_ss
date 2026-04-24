@@ -22,6 +22,10 @@ def main() -> None:
     p.add_argument("--checkpoint", required=True, help="Lightning checkpoint (.ckpt)")
     p.add_argument("--split", default="test", choices=["val", "test"])
     p.add_argument("--output", default=None, help="optional JSON output path")
+    p.add_argument("--save-dir", default=None,
+                    help="Override test_save_dir (where per_utterance.csv + audio are written)")
+    p.add_argument("--max-audio", type=int, default=50,
+                    help="Max number of test audio samples to save")
     p.add_argument("overrides", nargs="*")
     args = p.parse_args()
 
@@ -42,14 +46,43 @@ def main() -> None:
     })
 
     engine_name = str(cfg.get("engine", "standard"))
-    ModuleCls = ProposedGANModule if engine_name == "gan" else SeparationModule
-    pl_module = ModuleCls.load_from_checkpoint(
-        args.checkpoint, model=model,
-        training_cfg=cfg["training"],
-        sample_rate=int(cfg["data"]["sample_rate"]),
-    )
+    _eval_metrics = tuple(cfg["training"].get("eval_metrics",
+                                               ["si_sdr", "si_sdri", "pesq_wb", "stoi"]))
 
-    trainer = pl.Trainer(accelerator="auto", devices="auto", logger=False)
+    # Determine save_dir: explicit --save-dir > config-derived default
+    if args.save_dir:
+        save_dir = args.save_dir
+    else:
+        tag = str(cfg.get("tag", "run"))
+        save_dir = str(Path(cfg["training"]["logger"]["save_dir"]).expanduser() / tag)
+
+    if engine_name == "gan":
+        disc_cfg = cfg["model"].get("discriminator", {})
+        sched_cfg = cfg["model"].get("schedule", {})
+        training_cfg = dict(cfg["training"])
+        if "disc_lr" in cfg["model"]:
+            training_cfg["disc_lr"] = cfg["model"]["disc_lr"]
+        pl_module = ProposedGANModule.load_from_checkpoint(
+            args.checkpoint, model=model,
+            training_cfg=training_cfg,
+            sample_rate=int(cfg["data"]["sample_rate"]),
+            discriminator_cfg=disc_cfg,
+            schedule_cfg=sched_cfg,
+            eval_metrics=_eval_metrics,
+            test_save_dir=save_dir,
+            test_max_audio=args.max_audio,
+        )
+    else:
+        pl_module = SeparationModule.load_from_checkpoint(
+            args.checkpoint, model=model,
+            training_cfg=cfg["training"],
+            sample_rate=int(cfg["data"]["sample_rate"]),
+            eval_metrics=_eval_metrics,
+            test_save_dir=save_dir,
+            test_max_audio=args.max_audio,
+        )
+
+    trainer = pl.Trainer(accelerator="auto", devices=1, logger=False)
     results = trainer.test(pl_module, dataloaders=datamodule.test_dataloader()
                            if args.split == "test" else datamodule.val_dataloader(),
                            verbose=True)

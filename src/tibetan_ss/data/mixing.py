@@ -160,21 +160,23 @@ class MixtureSimulator:
         # --- length handling ------------------------------------------------
         if L <= 0:
             # Natural / full length — keep both speakers' complete signals.
-            # Use max(len_a, len_b) and zero-pad the shorter one, so no
-            # content from either speaker is lost. (PPT: "test 不裁剪".)
-            T = int(max(source_a.shape[-1], source_b.shape[-1]))
-            sa = np.zeros(T, dtype=np.float32)
-            sb = np.zeros(T, dtype=np.float32)
-            sa[:source_a.shape[-1]] = source_a.astype(np.float32, copy=False)
-            sb[:source_b.shape[-1]] = source_b.astype(np.float32, copy=False)
+            # RMS-normalise on the *original* (unpadded) waveform so the
+            # energy estimate is not diluted by trailing zeros.
+            sa = rms_normalize(source_a.astype(np.float32, copy=False),
+                               self.cfg.rms_target_dbfs)
+            sb = rms_normalize(source_b.astype(np.float32, copy=False),
+                               self.cfg.rms_target_dbfs)
+            len_speech_a = sa.shape[-1]
+            len_speech_b = sb.shape[-1]
         else:
             T = L
             sa = _pad_or_crop(source_a.astype(np.float32, copy=False), T, rng)
             sb = _pad_or_crop(source_b.astype(np.float32, copy=False), T, rng)
-
-        # --- RMS normalise both speakers to a common reference --------------
-        sa = rms_normalize(sa, self.cfg.rms_target_dbfs)
-        sb = rms_normalize(sb, self.cfg.rms_target_dbfs)
+            len_speech_a = T
+            len_speech_b = T
+            # --- RMS normalise (for fixed-length, no zero-padding issue) ----
+            sa = rms_normalize(sa, self.cfg.rms_target_dbfs)
+            sb = rms_normalize(sb, self.cfg.rms_target_dbfs)
 
         # --- apply level offset K (dB) to one speaker (random sign) ---------
         K = sample_level_diff(self.cfg.level_diff_db, rng)
@@ -189,19 +191,28 @@ class MixtureSimulator:
             level_db_a, level_db_b = -K / 2, +K / 2
 
         # --- overlap placement ---------------------------------------------
-        # True three-segment layout: [A-only | overlap(A+B) | B-only].
-        #   len_a + len_b = T + overlap_len
-        # so each speaker's active length = (T + overlap_len) / 2.
-        # A randomly chosen speaker is placed left.
         overlap = sample_overlap(self.cfg.overlap, rng)
         overlap = float(np.clip(overlap, 0.0, 1.0))
-        overlap_len = int(round(T * overlap))
 
-        # Each speaker occupies (T + overlap_len) / 2 samples.
-        # Clamp to [overlap_len, T] so neither speaker goes out of bounds.
-        len_a = min(T, max(overlap_len, (T + overlap_len + 1) // 2))
-        len_b = T + overlap_len - len_a                    # ensures len_a + len_b - T == overlap_len
-        len_b = min(T, max(overlap_len, len_b))
+        if L <= 0:
+            # Full-length mode: the mixture must be long enough to contain
+            # ALL speech from both speakers.  T = len_a + len_b - overlap_len
+            # where overlap_len is based on the *shorter* speaker's length.
+            min_speech = min(len_speech_a, len_speech_b)
+            overlap_samples = int(round(min_speech * overlap))
+            T = len_speech_a + len_speech_b - overlap_samples
+
+            # Each speaker occupies exactly their original speech length
+            # (no truncation). Zero-pad the final buffers to T.
+            len_a = len_speech_a
+            len_b = len_speech_b
+        else:
+            # Fixed-length mode (train/val): standard three-segment layout.
+            #   [A-only | overlap(A+B) | B-only], len_a + len_b = T + overlap_len
+            overlap_samples = int(round(T * overlap))
+            len_a = min(T, max(overlap_samples, (T + overlap_samples + 1) // 2))
+            len_b = T + overlap_samples - len_a
+            len_b = min(T, max(overlap_samples, len_b))
 
         # Randomly decide who goes left.
         if rng.integers(0, 2) == 0:
@@ -217,9 +228,7 @@ class MixtureSimulator:
         src2[b_start:b_start + len_b] = sb[:len_b]
 
         # Compute effective (non-silent) overlap: count frames where BOTH
-        # speakers have non-zero amplitude.  This may differ from the
-        # structural `overlap_ratio` when full_length=True pads the shorter
-        # speaker with zeros.
+        # speakers have non-zero amplitude.
         _thr = 1e-10
         active_1 = np.abs(src1) > _thr
         active_2 = np.abs(src2) > _thr
