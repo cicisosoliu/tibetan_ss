@@ -57,6 +57,13 @@ if [ "$SKIP_GENERATE" = "0" ]; then
     echo "================================================================"
     echo " Step 2: Regenerate test mixtures (fixed mixing.py)"
     echo "================================================================"
+    # Remove old test mixtures to avoid stale files remaining on disk
+    TEST_MIX_DIR="$REPO_ROOT/data/mixtures/test"
+    if [ -d "$TEST_MIX_DIR" ]; then
+        echo "  Removing old test mixtures: $TEST_MIX_DIR"
+        rm -rf "$TEST_MIX_DIR"
+    fi
+
     python -m tibetan_ss.data.scripts.generate_mixtures \
         --config "$DATA_CONFIG" \
         --splits test --force
